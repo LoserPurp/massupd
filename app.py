@@ -5,7 +5,7 @@ from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 from cryptography.hazmat.primitives import hashes
 from cryptography.fernet import Fernet
 import paramiko
-
+import time
 
 def derive_key(passphrase, salt=b'salt1234', iterations=100000):
     passphrase_bytes = passphrase.encode('utf-8')
@@ -28,18 +28,12 @@ def encrypt_credentials(credentials, key):
 def decrypt_credentials(encrypted_credentials, key):
     try:
         cipher_suite = Fernet(key)
-
         encrypted_credentials_bytes = base64.b64decode(encrypted_credentials)
-
         decrypted_credentials = cipher_suite.decrypt(encrypted_credentials_bytes)
         decrypted_credentials_str = decrypted_credentials.decode('utf-8')
-        
         return json.loads(decrypted_credentials_str.replace("'", "\""))
     except:
         print("Connections file is not formatted correctly!")
-
-
-
 
 def update_system(user, ip, password, package_manager):
     try:
@@ -48,13 +42,23 @@ def update_system(user, ip, password, package_manager):
         ssh.connect(ip, username=user, password=password)
 
         if package_manager == "apt":
-            stdin, stdout, stderr = ssh.exec_command("sudo apt update && sudo apt upgrade -y")
+            stdin, stdout, stderr = ssh.exec_command('sudo apt update && sudo apt upgrade -y\n', get_pty=True)
+
         elif package_manager == "dnf":
-            stdin, stdout, stderr = ssh.exec_command("sudo dnf upgrade -y")
+            stdin, stdout = ssh.exec_command("sudo dnf upgrade -y")
+
         elif package_manager == "yum":
             stdin, stdout, stderr = ssh.exec_command("sudo yum update -y")
+
         elif package_manager == "pacman":
             stdin, stdout, stderr = ssh.exec_command("sudo pacman -Syu --noconfirm")
+
+        stdin.write(password + '\n')
+        stdin.flush()
+
+        print("Update in progress, this may take a while.")
+        while not stdout.channel.exit_status_ready():
+            time.sleep(1)
 
         print(f"Update on {ip} using {package_manager} completed.")
     except Exception as e:
