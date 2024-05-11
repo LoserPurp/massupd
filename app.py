@@ -6,6 +6,7 @@ from cryptography.hazmat.primitives import hashes
 from cryptography.fernet import Fernet
 import paramiko
 import time
+import getpass
 
 def derive_key(passphrase, salt=b'salt1234', iterations=100000):
     passphrase_bytes = passphrase.encode('utf-8')
@@ -45,13 +46,13 @@ def update_system(user, ip, password, package_manager):
             stdin, stdout, stderr = ssh.exec_command('sudo apt update && sudo apt upgrade -y\n', get_pty=True)
 
         elif package_manager == "dnf":
-            stdin, stdout = ssh.exec_command("sudo dnf upgrade -y")
+            stdin, stdout = ssh.exec_command('sudo dnf upgrade -y\n', get_pty=True)
 
         elif package_manager == "yum":
-            stdin, stdout, stderr = ssh.exec_command("sudo yum update -y")
+            stdin, stdout, stderr = ssh.exec_command('sudo yum update -y\n', get_pty=True)
 
         elif package_manager == "pacman":
-            stdin, stdout, stderr = ssh.exec_command("sudo pacman -Syu --noconfirm")
+            stdin, stdout, stderr = ssh.exec_command('sudo pacman -Syu --noconfirm\n', get_pty=True)
 
         stdin.write(password + '\n')
         stdin.flush()
@@ -62,7 +63,7 @@ def update_system(user, ip, password, package_manager):
 
         print(f"Update on {ip} using {package_manager} completed.")
     except Exception as e:
-        print(f"Error updating {ip} using {package_manager}: {e}")
+        print(e)
     finally:
         ssh.close()
 
@@ -70,7 +71,7 @@ def add_new_connection():
     new_connection = {
         "user": input("Enter username: "),
         "ip": input("Enter IP address: "),
-        "password": input("Enter password: "),
+        "password": getpass.getpass("Enter password: "),
         "manager": input("Enter package manager (apt/dnf/yum/pacman): "),
     }
     return new_connection
@@ -92,13 +93,14 @@ def list_connections(encrypted_data, key):
 
 def main():
     parser = argparse.ArgumentParser(description="Update Linux systems and manage connections.")
-    parser.add_argument("-k", "--key", required=True, help="Passphrase to derive the key")
     parser.add_argument("-a", "--add", action="store_true", help="Add a new connection")
     parser.add_argument("-c", "--connection", action="store_true", help="List connections")
 
     args = parser.parse_args()
 
-    key = derive_key(args.key)
+    key = getpass.getpass("Enter decryption key: ")
+
+    key = derive_key(key)
 
     encrypted_data_file = "connections.json"
 
