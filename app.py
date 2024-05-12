@@ -8,6 +8,7 @@ import paramiko
 import time
 import getpass
 
+
 def derive_key(passphrase, salt=b'salt1234', iterations=100000):
     passphrase_bytes = passphrase.encode('utf-8')
     kdf = PBKDF2HMAC(
@@ -20,11 +21,13 @@ def derive_key(passphrase, salt=b'salt1234', iterations=100000):
     
     return base64.urlsafe_b64encode(derived_key).decode('utf-8')
 
+
 def encrypt_credentials(credentials, key):
     cipher_suite = Fernet(key)
     encrypted_credentials = cipher_suite.encrypt(json.dumps(credentials).encode())
     
     return base64.b64encode(encrypted_credentials).decode('utf-8')
+
 
 def decrypt_credentials(encrypted_credentials, key):
     try:
@@ -35,6 +38,7 @@ def decrypt_credentials(encrypted_credentials, key):
         return json.loads(decrypted_credentials_str.replace("'", "\""))
     except:
         print("Connections file is not formatted correctly!")
+
 
 def update_system(user, ip, password, package_manager):
     try:
@@ -67,14 +71,83 @@ def update_system(user, ip, password, package_manager):
     finally:
         ssh.close()
 
+def test_connection(user, ip, password):
+    try:
+        ssh = paramiko.SSHClient()
+        ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+        ssh.connect(ip, username=user, password=password)
+
+        stdin, stdout, stderr = ssh.exec_command('sudo whoami\n', get_pty=True)
+
+        stdin.write(password + '\n')
+        stdin.flush()
+
+        while not stdout.channel.exit_status_ready():
+            time.sleep(1)
+
+        print(f"test on {ip} was successful")
+    except Exception as e:
+        print(e)
+    finally:
+        ssh.close()
+
+
 def add_new_connection():
+    while True:
+        user = input("Enter username: ")
+        if user:
+            break
+        else:
+            print("Username cannot be blank.")
+
+    while True:
+        ip = input("Enter IP address: ")
+        if ip:
+            break
+        else:
+            print("IP address cannot be blank.")
+
+    while True:
+        port = input("Enter port (Blank for port 22): ")
+        if port:
+            break
+        elif port == "":
+            port = 22
+            print("Port set to 22")
+            break
+
+    while True:
+        password = getpass.getpass("Enter password: ")
+        if password:
+            break
+        else:
+            print("Password can not be blank")
+
+    while True:
+        sudo_password = input("Passwordless sudo? (Y/n): ").lower()
+        if sudo_password in ['y', 'n', '']:
+            break
+        else:
+            print("Please enter 'Y', 'N', or leave blank for default.")
+
+    while True:
+        manager = input("Enter package manager (apt/dnf/yum/pacman): ").lower()
+        if manager in ['apt', 'dnf', 'yum', 'pacman']:
+            break
+        else:
+            print("Invalid package manager. Please choose from 'apt', 'dnf', 'yum', or 'pacman'.")
+
+
     new_connection = {
-        "user": input("Enter username: "),
-        "ip": input("Enter IP address: "),
-        "password": getpass.getpass("Enter password: "),
-        "manager": input("Enter package manager (apt/dnf/yum/pacman): "),
+        "user": user,
+        "ip": ip,
+        "port": port,
+        "password": password,
+        "sudoPassword": sudo_password,
+        "manager": manager,
     }
     return new_connection
+
 
 def load_encryption_key():
     parser = argparse.ArgumentParser(description="Update Linux systems and manage connections.")
@@ -85,16 +158,19 @@ def load_encryption_key():
 
     return key.encode('utf-8')
 
+
 def list_connections(encrypted_data, key):
     for encrypted_connection in encrypted_data:
         decrypted_credentials = decrypt_credentials(encrypted_connection, key)
         print(f"IP: {decrypted_credentials['ip']}, User: {decrypted_credentials['user']}, "
               f"Package Manager: {decrypted_credentials['manager']}")
 
+
 def main():
     parser = argparse.ArgumentParser(description="Update Linux systems and manage connections.")
-    parser.add_argument("-a", "--add", action="store_true", help="Add a new connection")
+    parser.add_argument("-a", "--add", action="store_true", help="Add one or more new connections")
     parser.add_argument("-c", "--connection", action="store_true", help="List connections")
+    parser.add_argument("-t", "--test", action="store_true", help="Test connections")
 
     args = parser.parse_args()
 
@@ -117,7 +193,7 @@ def main():
             encrypted_data.append(encrypted_connection)
 
             add_another = input("Do you want to add another system? (yes/no): ").lower()
-            if add_another != "yes":
+            if add_another != "yes" or "y" or "":
                 break
 
         with open(encrypted_data_file, "w") as file:
@@ -128,6 +204,19 @@ def main():
             with open(encrypted_data_file, "r") as file:
                 encrypted_data = json.load(file)
             list_connections(encrypted_data, key)
+        except FileNotFoundError:
+            print("No connections found. Use --add to add new connections.")
+
+    elif args.test:
+        try:
+            with open(encrypted_data_file, "r") as file:
+                encrypted_data = json.load(file)
+
+            for encrypted_connection in encrypted_data:
+                decrypted_credentials = decrypt_credentials(encrypted_connection, key)
+                test_connection(decrypted_credentials["user"], decrypted_credentials["ip"],
+                               decrypted_credentials["password"])
+
         except FileNotFoundError:
             print("No connections found. Use --add to add new connections.")
 
@@ -143,6 +232,7 @@ def main():
 
         except FileNotFoundError:
             print("No connections found. Use --add to add new connections.")
+
 
 if __name__ == "__main__":
     main()
