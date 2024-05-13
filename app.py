@@ -37,14 +37,15 @@ def decrypt_credentials(encrypted_credentials, key):
         decrypted_credentials_str = decrypted_credentials.decode('utf-8')
         return json.loads(decrypted_credentials_str.replace("'", "\""))
     except:
-        print("Connections file is not formatted correctly!")
+        print("Wrong password or file is not formatted correctly!")
+        exit()
 
 
-def update_system(user, ip, password, package_manager):
+def update_system(user, ip, port, password, package_manager, sudo_password):
     try:
         ssh = paramiko.SSHClient()
         ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-        ssh.connect(ip, username=user, password=password)
+        ssh.connect(ip, username=user, password=password, port=port)
 
         if package_manager == "apt":
             stdin, stdout, stderr = ssh.exec_command('sudo apt update && sudo apt upgrade -y\n', get_pty=True)
@@ -58,8 +59,9 @@ def update_system(user, ip, password, package_manager):
         elif package_manager == "pacman":
             stdin, stdout, stderr = ssh.exec_command('sudo pacman -Syu --noconfirm\n', get_pty=True)
 
-        stdin.write(password + '\n')
-        stdin.flush()
+        if not sudo_password == 'y' or 'yes':
+            stdin.write(password + '\n')
+            stdin.flush()
 
         print("Update in progress, this may take a while.")
         while not stdout.channel.exit_status_ready():
@@ -71,16 +73,17 @@ def update_system(user, ip, password, package_manager):
     finally:
         ssh.close()
 
-def test_connection(user, ip, password):
+def test_connection(user, ip, port, password, sudo_password):
     try:
         ssh = paramiko.SSHClient()
         ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-        ssh.connect(ip, username=user, password=password)
+        ssh.connect(ip, username=user, password=password, port=port)
 
         stdin, stdout, stderr = ssh.exec_command('sudo whoami\n', get_pty=True)
 
-        stdin.write(password + '\n')
-        stdin.flush()
+        if not sudo_password == 'y' or 'yes':
+            stdin.write(password + '\n')
+            stdin.flush()
 
         while not stdout.channel.exit_status_ready():
             time.sleep(1)
@@ -125,7 +128,7 @@ def add_new_connection():
 
     while True:
         sudo_password = input("Passwordless sudo? (Y/n): ").lower()
-        if sudo_password in ['y', 'n', '']:
+        if sudo_password in ['y', 'n', '', 'yes', 'no']:
             break
         else:
             print("Please enter 'Y', 'N', or leave blank for default.")
@@ -162,14 +165,20 @@ def load_encryption_key():
 def list_connections(encrypted_data, key):
     for encrypted_connection in encrypted_data:
         decrypted_credentials = decrypt_credentials(encrypted_connection, key)
-        print(f"IP: {decrypted_credentials['ip']}, User: {decrypted_credentials['user']}, "
-              f"Package Manager: {decrypted_credentials['manager']}")
+
+        sudoP = decrypted_credentials['sudoPassword']
+        if sudoP in ['', 'n','no']:
+            sudoP = 'No'
+        else:
+            sudoP = 'Yes'
+        print(f"{decrypted_credentials['user']}@{decrypted_credentials['ip']}:{decrypted_credentials['port']}, "
+              f"Manager: {decrypted_credentials['manager']}, Passwordless sudo: {sudoP}")
 
 
 def main():
     parser = argparse.ArgumentParser(description="Update Linux systems and manage connections.")
     parser.add_argument("-a", "--add", action="store_true", help="Add one or more new connections")
-    parser.add_argument("-c", "--connection", action="store_true", help="List connections")
+    parser.add_argument("-c", "--connections", action="store_true", help="List connections")
     parser.add_argument("-t", "--test", action="store_true", help="Test connections")
 
     args = parser.parse_args()
@@ -199,7 +208,7 @@ def main():
         with open(encrypted_data_file, "w") as file:
             json.dump(encrypted_data, file)
 
-    elif args.connection:
+    elif args.connections:
         try:
             with open(encrypted_data_file, "r") as file:
                 encrypted_data = json.load(file)
@@ -215,7 +224,8 @@ def main():
             for encrypted_connection in encrypted_data:
                 decrypted_credentials = decrypt_credentials(encrypted_connection, key)
                 test_connection(decrypted_credentials["user"], decrypted_credentials["ip"],
-                               decrypted_credentials["password"])
+                                decrypted_credentials["port"], decrypted_credentials["password"],
+                                decrypted_credentials["sudoPassword"])
 
         except FileNotFoundError:
             print("No connections found. Use --add to add new connections.")
@@ -228,7 +238,8 @@ def main():
             for encrypted_connection in encrypted_data:
                 decrypted_credentials = decrypt_credentials(encrypted_connection, key)
                 update_system(decrypted_credentials["user"], decrypted_credentials["ip"],
-                               decrypted_credentials["password"], decrypted_credentials["manager"])
+                              decrypted_credentials["port"], decrypted_credentials["password"],
+                              decrypted_credentials["manager"], decrypted_credentials["sudoPassword"])
 
         except FileNotFoundError:
             print("No connections found. Use --add to add new connections.")
