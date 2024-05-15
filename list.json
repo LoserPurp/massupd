@@ -1,0 +1,36 @@
+{
+    "loop" : true,
+    "creds" : {
+        "user" : "bob",
+        "password" : "pWord",
+        "port" : 22,
+        "passwordSudo" : "no",
+        "manager" : "apt"
+    },
+    "ips" : [
+        "192.168.10.150",
+        "192.168.10.151",
+        "192.168.10.152",
+        "192.168.10.153",
+        "192.168.10.154",
+        "192.168.10.155"
+    ],
+    "connections" : [
+        {
+        "user": "jan",
+        "ip": "192.168.10.420",
+        "port": 22,
+        "password": "password",
+        "passwordSudo": "yes",
+        "manager": "yum"
+        },
+        {
+        "user": "banan",
+        "ip": "192.168.10.69",
+        "port": 33,
+        "password": "password",
+        "passwordSudo": "no",
+        "manager": "dnf"
+        }
+    ]
+}
