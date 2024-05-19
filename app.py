@@ -7,6 +7,7 @@ from cryptography.fernet import Fernet
 import paramiko
 import time
 import getpass
+import threading
 
 encrypted_data_file = "connections.json"
 
@@ -70,9 +71,10 @@ def update_system(user, ip, port, password, package_manager, sudo_password):
 
         print(f"Update on {ip} using {package_manager} completed.")
     except Exception as e:
-        print(e)
+        print(f"Error updating {ip}, {e}")
     finally:
         ssh.close()
+
 
 def test_connection(user, ip, port, password, sudo_password):
     try:
@@ -155,16 +157,6 @@ def add_new_connection():
     return new_connection
 
 
-def load_encryption_key():
-    parser = argparse.ArgumentParser(description="Update Linux systems and manage connections.")
-    parser.add_argument("--key", required=True, help="Encryption key")
-    args = parser.parse_args()
-
-    key = derive_key(args.key)
-
-    return key.encode('utf-8')
-
-
 def list_connections(encrypted_data, key):
     for encrypted_connection in encrypted_data:
         decrypted_credentials = decrypt_credentials(encrypted_connection, key)
@@ -191,7 +183,7 @@ def edit_credentials(key, ip, attribute, change):
             decrypted_data.append(decrypt_credentials(data, key))
         
     except FileNotFoundError:
-        print("No connections found. Use --add to add new connections.")
+        print("No connections found. Use --a or -i to add new connections.")
 
     for index, connection in enumerate(decrypted_data):
         if connection["ip"] == ip:
@@ -209,7 +201,7 @@ def edit_credentials(key, ip, attribute, change):
             json.dump(encrypted_data, file)
 
     except FileNotFoundError:
-        print("No connections found. Use --add to add new connections.")
+        print("No connections found. Use --a or -i to add new connections.")
 
 
 def remove_connection(key, ip):
@@ -223,7 +215,7 @@ def remove_connection(key, ip):
         for data in encrypted_data:
             decrypted_data.append(decrypt_credentials(data, key))
     except FileNotFoundError:
-        print("No connections found. Use --add to add new connections.")
+        print("No connections found. Use --a or -i to add new connections.")
         return
     except json.JSONDecodeError:
         print("Error decoding connection file.")
@@ -251,9 +243,6 @@ def remove_connection(key, ip):
         print(f"An error occurred while saving connections: {e}")
 
 
-
-
-
 def loop_add(key):
     new_connection = {}
 
@@ -267,10 +256,8 @@ def loop_add(key):
         encrypted_connection = encrypt_credentials(new_connection, key)
         encrypted_data.append(encrypted_connection)
 
-
         with open(encrypted_data_file, "w") as file:
             json.dump(encrypted_data, file)
-
 
     try:
         with open("list.json", "r") as file:
@@ -301,18 +288,23 @@ def loop_add(key):
             }
             add()
 
+
 def main():
     parser = argparse.ArgumentParser(description="Update Linux systems and manage connections.")
     parser.add_argument("-a", "--add", action="store_true", help="Add one or more new connections")
     parser.add_argument("-c", "--connections", action="store_true", help="List connections")
     parser.add_argument("-e", "--edit", action="store_true", help="Edit one or more connection")
     parser.add_argument("-i", "--import-list", action="store_true", help="import connections from list")
+    parser.add_argument("-k", "--key", action="store", help="Run script with key inn command")
     parser.add_argument("-r", "--remove", action="store_true", help="Remove connection by ip")
     parser.add_argument("-t", "--test", action="store_true", help="Test connections")
 
     args = parser.parse_args()
 
-    key = getpass.getpass("Enter decryption key: ")
+    if args.key:
+        key = args.key
+    else:
+        key = getpass.getpass("Enter decryption key: ")
 
     key = derive_key(key)
 
@@ -367,33 +359,66 @@ def main():
             print("No connections found. Use --a or -i to add new connections.")
 
     elif args.test:
+        print("Testing all connections...")
         try:
             with open(encrypted_data_file, "r") as file:
                 encrypted_data = json.load(file)
 
-            for encrypted_connection in encrypted_data:
-                decrypted_credentials = decrypt_credentials(encrypted_connection, key)
-                test_connection(decrypted_credentials["user"], decrypted_credentials["ip"],
+            # for encrypted_connection in encrypted_data:
+            #     decrypted_credentials = decrypt_credentials(encrypted_connection, key)
+            #     test_connection(decrypted_credentials["user"], decrypted_credentials["ip"],
+            #                     decrypted_credentials["port"], decrypted_credentials["password"],
+            #                     decrypted_credentials["passwordSudo"])
+            def run():
+                    decrypted_credentials = decrypt_credentials(encrypted_connection, key)
+                    test_connection(decrypted_credentials["user"], decrypted_credentials["ip"],
                                 decrypted_credentials["port"], decrypted_credentials["password"],
                                 decrypted_credentials["passwordSudo"])
 
+            threads = []
+            for encrypted_connection in encrypted_data:
+                thread = threading.Thread(target=run)
+                thread.start()
+                threads.append(thread)
+
+            for thread in threads:
+                thread.join()
+
         except FileNotFoundError:
-            print("No connections found. Use --add to add new connections.")
+            print("No connections found. Use --a or -i to add new connections.")
+        except KeyboardInterrupt:
+            exit()
 
     else:
+        print("Running update on all systems...")
         try:
             with open(encrypted_data_file, "r") as file:
                 encrypted_data = json.load(file)
 
+            # for encrypted_connection in encrypted_data:
+            #     decrypted_credentials = decrypt_credentials(encrypted_connection, key)
+            #     update_system(decrypted_credentials["user"], decrypted_credentials["ip"],
+            #                   decrypted_credentials["port"], decrypted_credentials["password"],
+            #                   decrypted_credentials["manager"], decrypted_credentials["passwordSudo"])
+                def run():
+                    decrypted_credentials = decrypt_credentials(encrypted_connection, key)
+                    update_system(decrypted_credentials["user"], decrypted_credentials["ip"],
+                                decrypted_credentials["port"], decrypted_credentials["password"],
+                                decrypted_credentials["manager"], decrypted_credentials["passwordSudo"])
+
+            threads = []
             for encrypted_connection in encrypted_data:
-                decrypted_credentials = decrypt_credentials(encrypted_connection, key)
-                update_system(decrypted_credentials["user"], decrypted_credentials["ip"],
-                              decrypted_credentials["port"], decrypted_credentials["password"],
-                              decrypted_credentials["manager"], decrypted_credentials["passwordSudo"])
+                thread = threading.Thread(target=run)
+                thread.start()
+                threads.append(thread)
+
+            for thread in threads:
+                thread.join()
 
         except FileNotFoundError:
-            print("No connections found. Use --add to add new connections.")
-
+            print("No connections found. Use --a or -i to add new connections.")
+        except KeyboardInterrupt:
+            exit()
 
 if __name__ == "__main__":
     main()
