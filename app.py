@@ -210,7 +210,49 @@ def edit_credentials(key, ip, attribute, change):
 
     except FileNotFoundError:
         print("No connections found. Use --add to add new connections.")
+
+
+def remove_connection(key, ip):
     
+    decrypted_data = []
+    found = False
+
+    try:
+        with open(encrypted_data_file, "r") as file:
+            encrypted_data = json.load(file)
+        for data in encrypted_data:
+            decrypted_data.append(decrypt_credentials(data, key))
+    except FileNotFoundError:
+        print("No connections found. Use --add to add new connections.")
+        return
+    except json.JSONDecodeError:
+        print("Error decoding connection file.")
+        return
+
+    for index, connection in enumerate(decrypted_data):
+        if connection["ip"] == ip:
+            found = True
+            break
+
+    if not found:
+        print(f"IP address {ip} not found in connections.")
+        return
+
+    del decrypted_data[index]
+
+    encrypted_data = []
+    for data in decrypted_data:
+        encrypted_data.append(encrypt_credentials(data, key))
+
+    try:
+        with open(encrypted_data_file, "w") as file:
+            json.dump(encrypted_data, file)
+    except Exception as e:
+        print(f"An error occurred while saving connections: {e}")
+
+
+
+
 
 def loop_add(key):
     new_connection = {}
@@ -263,9 +305,10 @@ def main():
     parser = argparse.ArgumentParser(description="Update Linux systems and manage connections.")
     parser.add_argument("-a", "--add", action="store_true", help="Add one or more new connections")
     parser.add_argument("-c", "--connections", action="store_true", help="List connections")
-    parser.add_argument("-t", "--test", action="store_true", help="Test connections")
-    parser.add_argument("-i", "--import-list", action="store_true", help="import connections from list")
     parser.add_argument("-e", "--edit", action="store_true", help="Edit one or more connection")
+    parser.add_argument("-i", "--import-list", action="store_true", help="import connections from list")
+    parser.add_argument("-r", "--remove", action="store_true", help="Remove connection by ip")
+    parser.add_argument("-t", "--test", action="store_true", help="Test connections")
 
     args = parser.parse_args()
 
@@ -294,7 +337,14 @@ def main():
             json.dump(encrypted_data, file)
 
     elif args.import_list:
-            loop_add(key)
+        loop_add(key)
+    
+    elif args.remove:
+        while True:
+            ip = input("type the IP of the connection you would like to remove: ")
+            if ip:
+                remove_connection(key, ip)
+                break
 
     elif args.edit:
         while True:
