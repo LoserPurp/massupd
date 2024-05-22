@@ -363,13 +363,6 @@ def main():
         log("Starting script with import function", True)
         loop_add(key)
 
-    elif args.log:
-        if args.log:
-            lines = read_log(args.log)
-        else: lines = read_log(25)
-        for line in lines:
-            print(line, end='')
-
     elif args.remove:
         log("Starting script with remove function", True)
         while True:
@@ -430,6 +423,13 @@ def main():
             print("No connections found. Use --a or -i to add new connections.")
         except KeyboardInterrupt:
             exit()
+
+    elif args.log:
+        if args.log:
+            lines = read_log(args.log)
+        else: lines = read_log(25)
+        for line in lines:
+            print(line, end='')
 
     else:
         log("Starting updated on all systems", True)
