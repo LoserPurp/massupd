@@ -1,5 +1,3 @@
-#!/usr/bin/env python3
-
 import json
 import argparse
 import base64
@@ -12,6 +10,11 @@ import getpass
 import threading
 from datetime import datetime
 from collections import deque
+import os
+
+script_directory = os.path.dirname(os.path.abspath(__file__))
+os.chdir(script_directory)
+
 
 encrypted_data_file = "connections.json"
 
