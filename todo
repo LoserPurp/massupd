@@ -6,6 +6,7 @@ support more managers
 add check so it does not add allready existing connections
 make config file
 add abillity to run custom commands
+add abillity to filter connections (black/ whitelist)
     logging
     multi threading
     make list and encrypt later
