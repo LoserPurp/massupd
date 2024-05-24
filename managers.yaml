@@ -1,0 +1,4 @@
+apt: 'sudo apt update && sudo apt upgrade -y'
+dnf: 'sudo dnf upgrade -y'
+yum: 'sudo yum update -y'
+pacman: 'sudo pacman -Syu --noconfirm'
