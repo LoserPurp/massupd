@@ -57,7 +57,7 @@ def get_managers():
             managers = yaml.safe_load(file)
             return(managers)
     except Exception as e:
-        log(f'Error reading manager file{e}', True)
+        log(f'Error reading manager file, {e}', True)
         exit()
 
 
@@ -162,15 +162,18 @@ def add_new_connection():
         if sudo_password in ['y', 'n', '', 'yes', 'no']:
             break
         else:
-            print("Please enter 'Y', 'N', or leave blank for default.")
+            print("Please enter 'Y', 'N', or leave blank for no.")
 
+    managers = get_managers()
+    manger_list = ""
     while True:
-        manager = input("Enter package manager (apt/dnf/yum/pacman): ").lower()
-        if manager in ['apt', 'dnf', 'yum', 'pacman']:
+        for manger in managers:
+            manger_list += f"{manger}/"
+        manager = input(f"Enter package manager ({manger_list[:-1]}): ").lower()
+        if manager in managers:
             break
         else:
-            # print(f"list: {[(manager) for manager in get_managers().keys()]}")
-            print("Invalid package manager. Please choose from 'apt', 'dnf', 'yum', or 'pacman'.")
+            print(f"Invalid package manager. Please choose from ({manger_list[:-1]})")
 
 
     new_connection = {
@@ -209,7 +212,7 @@ def edit_credentials(key, ip, attribute, change):
             encrypted_data = json.load(file)
         for data in encrypted_data:
             decrypted_data.append(decrypt_credentials(data, key))
-        
+
     except FileNotFoundError:
         print("No connections found. Use --a or -i to add new connections.")
 
@@ -344,8 +347,14 @@ def main():
 
         args = parser.parse_args()
 
-        print(get_managers().keys())
-        print(f"list: {[(manager) for manager in get_managers().keys()]}")
+        if args.log is not None:
+            print(args.log)
+            read_log(args.log)
+            lines = read_log(args.log)
+            for line in lines:
+                print(line, end='')
+            exit()
+
 
         if args.key:
             key = args.key
@@ -390,11 +399,16 @@ def main():
         elif args.edit:
             log("Starting script with edit function", False)
             while True:
+                managers = get_managers()
                 ip = input("type the IP of the connection you would like to change: ")
                 attribute = input("What would you like to change? (IP, user, port, password, passwordless sudo or package manager) ")
-                change = input("What would you like to change it to?: ")
-
-                edit_credentials(key, ip, attribute, change)
+                while True:
+                    change = input("What would you like to change it to?: ")
+                    if attribute == "manager" and change not in managers:
+                        print(f"{attribute} is not in manager list")
+                    else:
+                        edit_credentials(key, ip, attribute, change)
+                        break
 
                 add_another = input("Do you want to change another connection? [Y/n]: ")
                 if add_another.lower() in ["no", "n", ""]:
@@ -415,11 +429,6 @@ def main():
                 with open(encrypted_data_file, "r") as file:
                     encrypted_data = json.load(file)
 
-                # for encrypted_connection in encrypted_data:
-                #     decrypted_credentials = decrypt_credentials(encrypted_connection, key)
-                #     test_connection(decrypted_credentials["user"], decrypted_credentials["ip"],
-                #                     decrypted_credentials["port"], decrypted_credentials["password"],
-                #                     decrypted_credentials["passwordSudo"])
                 def run():
                         decrypted_credentials = decrypt_credentials(encrypted_connection, key)
                         test_connection(decrypted_credentials["user"], decrypted_credentials["ip"],
@@ -440,24 +449,12 @@ def main():
             except KeyboardInterrupt:
                 exit()
 
-        elif args.log is not None:
-            print(args.log)
-            read_log(args.log)
-            lines = read_log(args.log)
-            for line in lines:
-                print(line, end='')
-
         else:
             log("Starting updated on all systems", True)
             try:
                 with open(encrypted_data_file, "r") as file:
                     encrypted_data = json.load(file)
 
-                # for encrypted_connection in encrypted_data:
-                #     decrypted_credentials = decrypt_credentials(encrypted_connection, key)
-                #     update_system(decrypted_credentials["user"], decrypted_credentials["ip"],
-                #                   decrypted_credentials["port"], decrypted_credentials["password"],
-                #                   decrypted_credentials["manager"], decrypted_credentials["passwordSudo"])
                     def run():
                         decrypted_credentials = decrypt_credentials(encrypted_connection, key)
                         update_system(decrypted_credentials["user"], decrypted_credentials["ip"],
