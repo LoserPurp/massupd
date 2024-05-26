@@ -282,6 +282,29 @@ def read_log(number_of_lines):
     return list(last_n_lines)
 
 
+def run_custom_command(user, ip, port, password, sudo_password, command):
+    try:
+        ssh = paramiko.SSHClient()
+        ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+        ssh.connect(ip, username=user, password=password, port=port)
+
+        stdin, stdout, stderr = ssh.exec_command(f'{command}\n', get_pty=True)
+
+        if command.lower().startswith('sudo') and not sudo_password == 'y' or 'yes':
+            stdin.write(password + '\n')
+            stdin.flush()
+
+        while not stdout.channel.exit_status_ready():
+            time.sleep(1)
+
+        log(f"Custom command [{command}] on {ip} ran sucessfully", False)
+        print(f"Custom command on {ip} ran sucessfully")
+    except Exception as e:
+        log(f'Error running custom command on {ip}: {e}', True)
+    finally:
+        ssh.close()
+
+
 def loop_add(key):
     new_connection = {}
 
@@ -344,6 +367,7 @@ def main():
         parser.add_argument("-k", "--key", action="store", help="Run script with key inn command")
         parser.add_argument("-r", "--remove", action="store_true", help="Remove connection by ip")
         parser.add_argument("-t", "--test", action="store_true", help="Test connections")
+        parser.add_argument("-u", "--user-command", action="store_true", help="runs a user defined command")
 
         args = parser.parse_args()
 
@@ -434,6 +458,33 @@ def main():
                         test_connection(decrypted_credentials["user"], decrypted_credentials["ip"],
                                     decrypted_credentials["port"], decrypted_credentials["password"],
                                     decrypted_credentials["passwordSudo"])
+
+                threads = []
+                for encrypted_connection in encrypted_data:
+                    thread = threading.Thread(target=run)
+                    thread.start()
+                    threads.append(thread)
+
+                for thread in threads:
+                    thread.join()
+
+            except FileNotFoundError:
+                print("No connections found. Use --a or -i to add new connections.")
+            except KeyboardInterrupt:
+                exit()
+        
+        elif args.user_command:
+            custom_command = input("What command would you like to run?: ")
+            log("Running custom command on all systems", True)
+            try:
+                with open(encrypted_data_file, "r") as file:
+                    encrypted_data = json.load(file)
+
+                def run():
+                        decrypted_credentials = decrypt_credentials(encrypted_connection, key)
+                        run_custom_command(decrypted_credentials["user"], decrypted_credentials["ip"],
+                                    decrypted_credentials["port"], decrypted_credentials["password"],
+                                    decrypted_credentials["passwordSudo"], custom_command)
 
                 threads = []
                 for encrypted_connection in encrypted_data:
