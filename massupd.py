@@ -16,6 +16,7 @@ import yaml
 script_directory = os.path.dirname(os.path.abspath(__file__))
 os.chdir(script_directory)
 
+filters = {}
 
 encrypted_data_file = "connections.json"
 
@@ -73,11 +74,28 @@ def log(msg, to_console):
 
 def update_system(user, ip, port, password, package_manager, sudo_password):
     try:
+        managers = get_managers()
+        check = ['user', 'ip', 'port', 'password', 'passwordSudo', 'manager']
+        check2 = [user, ip, port, password, sudo_password, package_manager]
+
+        ssh = paramiko.SSHClient()
+        ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+
+        if not filters:
+            ssh.connect(ip, username=user, password=password, port=port)
+
+        elif filters["filter"] in ['w', 'wl', 'whitelist'] and filters["filtering"] in check and filters["value"] in check2:
+            ssh.connect(ip, username=user, password=password, port=port)
+
+        elif filters["filter"] in ['b', 'bl', 'blacklist'] and filters["filtering"] in check and filters["value"] not in check2:
+            ssh.connect(ip, username=user, password=password, port=port)
+
+        else:
+            return
+        
         ssh = paramiko.SSHClient()
         ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
         ssh.connect(ip, username=user, password=password, port=port)
-
-        managers = get_managers()
 
         if package_manager in managers:
             stdin, stdout, stderr = ssh.exec_command(f'{managers[package_manager]}\n', get_pty=True)
@@ -100,13 +118,28 @@ def update_system(user, ip, port, password, package_manager, sudo_password):
         ssh.close()
 
 
-def test_connection(user, ip, port, password, sudo_password):
+def test_connection(user, ip, port, password, sudo_password, manager):
     try:
+        check = ['user', 'ip', 'port', 'password', 'passwordSudo', 'manager']
+        check2 = [user, ip, port, password, sudo_password, manager]
+
         ssh = paramiko.SSHClient()
         ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-        ssh.connect(ip, username=user, password=password, port=port)
+
+        if not filters:
+            ssh.connect(ip, username=user, password=password, port=port)
+
+        elif filters["filter"] in ['w', 'wl', 'whitelist'] and filters["filtering"] in check and filters["value"] in check2:
+            ssh.connect(ip, username=user, password=password, port=port)
+
+        elif filters["filter"] in ['b', 'bl', 'blacklist'] and filters["filtering"] in check and filters["value"] not in check2:
+            ssh.connect(ip, username=user, password=password, port=port)
+            
+        else:
+            return
 
         stdin, stdout, stderr = ssh.exec_command('sudo whoami\n', get_pty=True)
+        log(f"test on {ip} was successfull", False)
 
         if not sudo_password == 'y' or 'yes':
             stdin.write(password + '\n')
@@ -197,8 +230,20 @@ def list_connections(encrypted_data, key):
             sudoP = 'No'
         else:
             sudoP = 'Yes'
-        print(f"{decrypted_credentials['user']}@{decrypted_credentials['ip']}:{decrypted_credentials['port']}, "
+
+        if not filters:
+            print(f"{decrypted_credentials['user']}@{decrypted_credentials['ip']}:{decrypted_credentials['port']}, "
               f"Manager: {decrypted_credentials['manager']}, Passwordless sudo: {sudoP}")
+
+        elif filters["filter"] in ['w', 'wl', 'whitelist']:
+            if decrypted_credentials[filters["filtering"]] == filters["value"]:
+                print(f"{decrypted_credentials['user']}@{decrypted_credentials['ip']}:{decrypted_credentials['port']}, "
+                    f"Manager: {decrypted_credentials['manager']}, Passwordless sudo: {sudoP}")
+
+        elif filters["filter"] in ['b', 'bl', 'blacklist']:
+            if decrypted_credentials[filters["filtering"]] != filters["value"]:
+                print(f"{decrypted_credentials['user']}@{decrypted_credentials['ip']}:{decrypted_credentials['port']}, "
+                    f"Manager: {decrypted_credentials['manager']}, Passwordless sudo: {sudoP}")
 
 
 def edit_credentials(key, ip, attribute, change):
@@ -282,27 +327,48 @@ def read_log(number_of_lines):
     return list(last_n_lines)
 
 
-def run_custom_command(user, ip, port, password, sudo_password, command):
+def run_custom_command(user, ip, port, password, sudo_password, command, manager):
     try:
+        check = ['user', 'ip', 'port', 'password', 'passwordSudo', 'manager']
+        check2 = [user, ip, port, password, sudo_password, manager]
+
         ssh = paramiko.SSHClient()
         ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-        ssh.connect(ip, username=user, password=password, port=port)
+
+        if not filters:
+            ssh.connect(ip, username=user, password=password, port=port)
+            log(f"Custom command [{command}] on {ip} ran successfully", False)
+            print(f"Custom command on {ip} ran successfully")
+
+        elif filters["filter"] in ['w', 'wl', 'whitelist'] and filters["filtering"] in check and filters["value"] in check2:
+            ssh.connect(ip, username=user, password=password, port=port)
+            log(f"Custom command [{command}] on {ip} ran successfully", False)
+            print(f"Custom command on {ip} ran successfully")
+
+        elif filters["filter"] in ['b', 'bl', 'blacklist'] and filters["filtering"] in check and filters["value"] not in check2:
+            ssh.connect(ip, username=user, password=password, port=port)
+            log(f"Custom command [{command}] on {ip} ran successfully", False)
+            print(f"Custom command on {ip} ran successfully")
+
+        else:
+            return
 
         stdin, stdout, stderr = ssh.exec_command(f'{command}\n', get_pty=True)
 
-        if command.lower().startswith('sudo') and not sudo_password == 'y' or 'yes':
-            stdin.write(password + '\n')
+        if command.lower().startswith('sudo') and sudo_password not in ['y', 'yes']:
+            stdin.write(sudo_password + '\n')
             stdin.flush()
 
         while not stdout.channel.exit_status_ready():
             time.sleep(1)
 
-        log(f"Custom command [{command}] on {ip} ran sucessfully", False)
-        print(f"Custom command on {ip} ran sucessfully")
     except Exception as e:
         log(f'Error running custom command on {ip}: {e}', True)
     finally:
-        ssh.close()
+        try:
+            ssh.close()
+        except Exception as e:
+            log(f'Error closing SSH connection: {e}', True)
 
 
 def loop_add(key):
@@ -359,15 +425,16 @@ def main():
     try:
         parser = argparse.ArgumentParser(description="Update Linux systems and manage connections.", add_help=False,)
         parser.add_argument("-a", "--add", action="store_true", help="Add one or more new connections")
-        parser.add_argument("-c", "--connections", action="store_true", help="List connections")
+        parser.add_argument("-c", "--connections", action="store_true", help="List all connections")
         parser.add_argument("-e", "--edit", action="store_true", help="Edit one or more connection")
+        parser.add_argument("-f", "--filter", action="store", help="Filter out connections")
         parser.add_argument("-h", "--help", action="help", help="Shows this message")
         parser.add_argument("-i", "--import-list", action="store_true", help="import connections from list")
         parser.add_argument("-l", "--log", nargs='?', const=25, default=None, help="Reads last 'n' lines in log file (default / blank is 25)")
         parser.add_argument("-k", "--key", action="store", help="Run script with key inn command")
         parser.add_argument("-r", "--remove", action="store_true", help="Remove connection by ip")
-        parser.add_argument("-t", "--test", action="store_true", help="Test connections")
-        parser.add_argument("-u", "--user-command", action="store_true", help="runs a user defined command")
+        parser.add_argument("-t", "--test", action="store_true", help="Test all connections")
+        parser.add_argument("-u", "--user-command", action="store_true", help="Run a user defined command")
 
         args = parser.parse_args()
 
@@ -386,6 +453,23 @@ def main():
             key = getpass.getpass("Enter decryption key: ")
 
         key = derive_key(key)
+
+
+        if args.filter:
+            if args.connections or args.edit or args.log:
+                print("Filter can not be run along this argument, use filter with (update, test or when running a custom command)")
+                exit()
+            while True:
+                if args.filter not in ['w', 'b', 'white', 'black', 'whitelist', 'blacklist', 'wl', 'bl']:
+                    print('Filter must be white or blacklist (w/b)')
+                else:
+                    global filters
+                    filters = {
+                        "filter" : args.filter,
+                        "filtering" : input("What do you want to filter? (IP, user, port, password, passwordSudo or manager) "),
+                        "value" : input("Choose a value to filter ")
+                    }
+                break
 
 
         if args.add:
@@ -408,9 +492,11 @@ def main():
             with open(encrypted_data_file, "w") as file:
                 json.dump(encrypted_data, file)
 
+
         elif args.import_list:
             log("Starting script with import function", False)
             loop_add(key)
+
 
         elif args.remove:
             log("Starting script with remove function", False)
@@ -420,15 +506,48 @@ def main():
                     remove_connection(key, ip)
                     break
 
-        elif args.edit:
+
+        elif args.edit:         
+            attribute_mapping = {
+                1: "iP",
+                2: "user",
+                3: "port",
+                4: "password",
+                5: "passwordSudo",
+                6: "manager"
+            }
+
             log("Starting script with edit function", False)
             while True:
                 managers = get_managers()
                 ip = input("type the IP of the connection you would like to change: ")
-                attribute = input("What would you like to change? (IP, user, port, password, passwordless sudo or package manager) ")
+                print("\n"
+                      "1) IP\n"
+                      "2) User\n"
+                      "3) Port\n"
+                      "4) Password\n"
+                      "5) Passwordless Sudo [Y/n]\n"
+                      "6) Password Manager\n"
+                      )
+
+                while True:
+                    try:
+                        attribute = int(input("Enter an option from 1-6: "))
+                        if 1 <= attribute <= 6:
+                            attribute = attribute_mapping[attribute]
+                            break
+                        else:
+                            print("Invalid input. Please enter a number between 1 and 6.")
+                    except ValueError:
+                        pass
+
                 while True:
                     change = input("What would you like to change it to?: ")
-                    if attribute == "manager" and change not in managers:
+                    if attribute == "port" and not change.isnumeric():
+                        print("Port must be a number")
+                    elif attribute == "passwordSudo" and change.lower() not in ['y', 'n', 'yes', 'no']:
+                        print("Value must be Yes or No [Y/n]")
+                    elif attribute == "manager" and change not in managers:
                         print(f"{attribute} is not in manager list")
                     else:
                         edit_credentials(key, ip, attribute, change)
@@ -438,6 +557,7 @@ def main():
                 if add_another.lower() in ["no", "n", ""]:
                     break
 
+
         elif args.connections:
             log("Starting script with list connections function", False)
             try:
@@ -446,6 +566,7 @@ def main():
                 list_connections(encrypted_data, key)
             except FileNotFoundError:
                 print("No connections found. Use --a or -i to add new connections.")
+
 
         elif args.test:
             log("Staring test on all connections", True)
@@ -457,7 +578,7 @@ def main():
                         decrypted_credentials = decrypt_credentials(encrypted_connection, key)
                         test_connection(decrypted_credentials["user"], decrypted_credentials["ip"],
                                     decrypted_credentials["port"], decrypted_credentials["password"],
-                                    decrypted_credentials["passwordSudo"])
+                                    decrypted_credentials["passwordSudo"], decrypted_credentials["manager"])
 
                 threads = []
                 for encrypted_connection in encrypted_data:
@@ -472,7 +593,8 @@ def main():
                 print("No connections found. Use --a or -i to add new connections.")
             except KeyboardInterrupt:
                 exit()
-        
+
+
         elif args.user_command:
             custom_command = input("What command would you like to run?: ")
             log("Running custom command on all systems", True)
@@ -484,7 +606,7 @@ def main():
                         decrypted_credentials = decrypt_credentials(encrypted_connection, key)
                         run_custom_command(decrypted_credentials["user"], decrypted_credentials["ip"],
                                     decrypted_credentials["port"], decrypted_credentials["password"],
-                                    decrypted_credentials["passwordSudo"], custom_command)
+                                    decrypted_credentials["passwordSudo"], custom_command, decrypted_credentials["manager"])
 
                 threads = []
                 for encrypted_connection in encrypted_data:
@@ -499,6 +621,7 @@ def main():
                 print("No connections found. Use --a or -i to add new connections.")
             except KeyboardInterrupt:
                 exit()
+
 
         else:
             log("Starting updated on all systems", True)
@@ -527,6 +650,7 @@ def main():
             except KeyboardInterrupt:
                 log("Update cancelled, keyboard interrupt", False)
                 exit()
+
 
 
     except KeyboardInterrupt:
