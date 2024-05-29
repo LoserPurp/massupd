@@ -17,8 +17,8 @@ script_directory = os.path.dirname(os.path.abspath(__file__))
 os.chdir(script_directory)
 
 filters = {}
-
 encrypted_data_file = "connections.json"
+
 
 def derive_key(passphrase, salt=b'salt1234', iterations=100000):
     passphrase_bytes = passphrase.encode('utf-8')
@@ -29,7 +29,7 @@ def derive_key(passphrase, salt=b'salt1234', iterations=100000):
         iterations=iterations
     )
     derived_key = kdf.derive(passphrase_bytes)
-    
+
     return base64.urlsafe_b64encode(derived_key).decode('utf-8')
 
 
@@ -92,7 +92,7 @@ def update_system(user, ip, port, password, package_manager, sudo_password):
 
         else:
             return
-        
+
         ssh = paramiko.SSHClient()
         ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
         ssh.connect(ip, username=user, password=password, port=port)
@@ -134,7 +134,7 @@ def test_connection(user, ip, port, password, sudo_password, manager):
 
         elif filters["filter"] in ['b', 'bl', 'blacklist'] and filters["filtering"] in check and filters["value"] not in check2:
             ssh.connect(ip, username=user, password=password, port=port)
-            
+
         else:
             return
 
@@ -155,7 +155,20 @@ def test_connection(user, ip, port, password, sudo_password, manager):
         ssh.close()
 
 
-def add_new_connection():
+def add_new_connection(key):
+    all_connection_ips = []
+
+    try:
+        with open(encrypted_data_file, "r") as file:
+            encrypted_data = json.load(file)
+    except FileNotFoundError:
+        encrypted_data = []
+
+    for encrypted_connection in encrypted_data:
+        decrypted_credentials = decrypt_credentials(encrypted_connection, key)
+        all_connection_ips.append(decrypted_credentials["ip"])
+
+
     while True:
         user = input("Enter username: ")
         if user:
@@ -165,7 +178,9 @@ def add_new_connection():
 
     while True:
         ip = input("Enter IP address: ")
-        if ip:
+        if ip in all_connection_ips:
+            print("A connection with the same ip already exists")
+        elif ip:
             break
         else:
             print("IP address cannot be blank.")
@@ -191,7 +206,7 @@ def add_new_connection():
             print("Password can not be blank")
 
     while True:
-        sudo_password = input("Passwordless sudo? (Y/n): ").lower()
+        sudo_password = input("Passwordless sudo? [Y/n]: ").lower()
         if sudo_password in ['y', 'n', '', 'yes', 'no']:
             break
         else:
@@ -199,9 +214,9 @@ def add_new_connection():
 
     managers = get_managers()
     manger_list = ""
+    for manger in managers:
+        manger_list += f"{manger}/"
     while True:
-        for manger in managers:
-            manger_list += f"{manger}/"
         manager = input(f"Enter package manager ({manger_list[:-1]}): ").lower()
         if manager in managers:
             break
@@ -259,7 +274,7 @@ def edit_credentials(key, ip, attribute, change):
             decrypted_data.append(decrypt_credentials(data, key))
 
     except FileNotFoundError:
-        print("No connections found. Use --a or -i to add new connections.")
+        print("No connections found. Use -a or -i to add new connections.")
 
     for index, connection in enumerate(decrypted_data):
         if connection["ip"] == ip:
@@ -277,7 +292,7 @@ def edit_credentials(key, ip, attribute, change):
             json.dump(encrypted_data, file)
 
     except FileNotFoundError:
-        print("No connections found. Use --a or -i to add new connections.")
+        print("No connections found. Use -a or -i to add new connections.")
 
 
 def remove_connection(key, ip):
@@ -292,7 +307,7 @@ def remove_connection(key, ip):
             decrypted_data.append(decrypt_credentials(data, key))
     except FileNotFoundError:
         log(f'Error removing connection {ip}: connection file not found', False)
-        print("No connections found. Use --a or -i to add new connections.")
+        print("No connections found. Use -a or -i to add new connections.")
         return
     except json.JSONDecodeError:
         print("Error decoding connection file.")
@@ -319,6 +334,26 @@ def remove_connection(key, ip):
             json.dump(encrypted_data, file)
     except Exception as e:
         print(f"An error occurred while saving connections: {e}")
+
+
+def check_key(key):
+    check_key = ""
+    try:
+        with open('key.txt', "r") as file:
+            check_key = file.read()
+    except FileNotFoundError:
+        with open('key.txt', "w") as file:
+            check_key = encrypt_credentials(key, key)
+            file.write(check_key)
+    try:
+        cipher_suite = Fernet(key)
+        encrypted_credentials_bytes = base64.b64decode(check_key)
+        decrypted_credentials = cipher_suite.decrypt(encrypted_credentials_bytes)
+        decrypted_credentials_str = decrypted_credentials.decode('utf-8')
+        return json.loads(decrypted_credentials_str.replace("'", "\""))
+    except:
+        return False
+
 
 
 def read_log(number_of_lines):
@@ -373,14 +408,19 @@ def run_custom_command(user, ip, port, password, sudo_password, command, manager
 
 def loop_add(key):
     new_connection = {}
+    all_connection_ips = []
+
+    try:
+        with open(encrypted_data_file, "r") as file:
+            encrypted_data = json.load(file)
+    except FileNotFoundError:
+        encrypted_data = []
+
+    for encrypted_connection in encrypted_data:
+        decrypted_credentials = decrypt_credentials(encrypted_connection, key)
+        all_connection_ips.append(decrypted_credentials["ip"])
 
     def add():
-        try:
-            with open(encrypted_data_file, "r") as file:
-                encrypted_data = json.load(file)
-        except FileNotFoundError:
-            encrypted_data = []
-
         encrypted_connection = encrypt_credentials(new_connection, key)
         encrypted_data.append(encrypted_connection)
 
@@ -393,7 +433,6 @@ def loop_add(key):
     except Exception as e:
         log(f'Error importing connections from file, {e}', True)
     if cons["loop"] == True:
-        log(f'Importing {len(cons["ips"])} connections with shared credentials', False)
         for ip in cons["ips"]:
             new_connection = {
                 "user": cons["creds"]["user"],
@@ -403,8 +442,12 @@ def loop_add(key):
                 "passwordSudo": cons["creds"]["passwordSudo"],
                 "manager": cons["creds"]["manager"],
             }
-            add()
-            log(f'Added connection: {cons["creds"]["user"]}@{ip}:{cons["creds"]["port"]} using {cons["creds"]["manager"]}', True)
+            if ip not in all_connection_ips:
+                add()
+                log(f'Importing {len(cons["ips"])} connections with shared credentials', False)
+                log(f'Added connection: {cons["creds"]["user"]}@{ip}:{cons["creds"]["port"]} using {cons["creds"]["manager"]}', True)
+            else:
+                print(f'{ip} was skipped because a connection with that same ip already exists')
 
     if cons["connections"]:
         log(f'Importing {len(cons["connections"])} connections with seperate credentials', False)
@@ -417,9 +460,11 @@ def loop_add(key):
                 "passwordSudo": connection["passwordSudo"],
                 "manager": connection["manager"],
             }
-            add()
-            log(f'Added connection: {cons["creds"]["user"]}@{ip}:{cons["creds"]["port"]} using {cons["creds"]["manager"]}', True)
-
+            if connection["ip"] not in all_connection_ips:
+                add()
+                log(f'Added connection: {connection["user"]}@{connection["ip"]}:{connection["port"]} using {connection["manager"]}', True)
+            else:
+                print(f'{connection["ip"]} was skipped because a connection with that same ip already exists')
 
 def main():
     try:
@@ -439,7 +484,6 @@ def main():
         args = parser.parse_args()
 
         if args.log is not None:
-            print(args.log)
             read_log(args.log)
             lines = read_log(args.log)
             for line in lines:
@@ -453,7 +497,11 @@ def main():
             key = getpass.getpass("Enter decryption key: ")
 
         key = derive_key(key)
+        check = check_key(key)
 
+        if key != check:
+            log("Error, key does not match!", True)
+            exit()
 
         if args.filter:
             if args.connections or args.edit or args.log:
@@ -481,7 +529,7 @@ def main():
                 encrypted_data = []
 
             while True:
-                new_connection = add_new_connection()
+                new_connection = add_new_connection(key)
                 encrypted_connection = encrypt_credentials(new_connection, key)
                 encrypted_data.append(encrypted_connection)
 
@@ -499,6 +547,16 @@ def main():
 
 
         elif args.remove:
+            try:
+                with open(encrypted_data_file, "r") as file:
+                    encrypted_data = json.load(file)
+            except FileNotFoundError:
+                encrypted_data = []
+
+            if not encrypted_data:
+                    print("No connections found. Use -a or -i to add new connections.")
+                    return
+
             log("Starting script with remove function", False)
             while True:
                 ip = input("type the IP of the connection you would like to remove: ")
@@ -507,19 +565,30 @@ def main():
                     break
 
 
-        elif args.edit:         
+        elif args.edit:
+            try:
+                with open(encrypted_data_file, "r") as file:
+                    encrypted_data = json.load(file)
+                    if not encrypted_data:
+                        print("No connections found. Use -a or -i to add new connections.")
+                        return
+            except:
+                print("No connections found. Use -a or -i to add new connections.")
+                return
+
             attribute_mapping = {
-                1: "iP",
+                1: "ip",
                 2: "user",
                 3: "port",
                 4: "password",
                 5: "passwordSudo",
-                6: "manager"
+                6: "manager",
+                7: "exit"
             }
 
             log("Starting script with edit function", False)
+            managers = get_managers()
             while True:
-                managers = get_managers()
                 ip = input("type the IP of the connection you would like to change: ")
                 print("\n"
                       "1) IP\n"
@@ -528,16 +597,20 @@ def main():
                       "4) Password\n"
                       "5) Passwordless Sudo [Y/n]\n"
                       "6) Password Manager\n"
+                      "7) Exit\n"
                       )
 
                 while True:
                     try:
-                        attribute = int(input("Enter an option from 1-6: "))
-                        if 1 <= attribute <= 6:
+                        attribute = int(input("Enter an option from 1-7: "))
+                        if 1 <= attribute <= 7:
+                            if attribute == 7:
+                                exit()
                             attribute = attribute_mapping[attribute]
                             break
                         else:
-                            print("Invalid input. Please enter a number between 1 and 6.")
+                            print("Invalid input. Please enter a number between 1 and 7.")
+                        
                     except ValueError:
                         pass
 
@@ -563,16 +636,22 @@ def main():
             try:
                 with open(encrypted_data_file, "r") as file:
                     encrypted_data = json.load(file)
+                    if not encrypted_data:
+                        print("No connections found. Use -a or -i to add new connections.")
+                        return
                 list_connections(encrypted_data, key)
             except FileNotFoundError:
-                print("No connections found. Use --a or -i to add new connections.")
+                print("No connections found. Use -a or -i to add new connections.")
 
 
         elif args.test:
-            log("Staring test on all connections", True)
             try:
                 with open(encrypted_data_file, "r") as file:
                     encrypted_data = json.load(file)
+                    if not encrypted_data:
+                        print("No connections found. Use -a or -i to add new connections.")
+                        return
+                log("Staring test on all connections", True)    
 
                 def run():
                         decrypted_credentials = decrypt_credentials(encrypted_connection, key)
@@ -590,18 +669,21 @@ def main():
                     thread.join()
 
             except FileNotFoundError:
-                print("No connections found. Use --a or -i to add new connections.")
+                print("No connections found. Use -a or -i to add new connections.")
             except KeyboardInterrupt:
                 exit()
 
 
         elif args.user_command:
-            custom_command = input("What command would you like to run?: ")
-            log("Running custom command on all systems", True)
             try:
                 with open(encrypted_data_file, "r") as file:
                     encrypted_data = json.load(file)
+                    if not encrypted_data:
+                        print("No connections found. Use -a or -i to add new connections.")
+                        return
 
+                custom_command = input("What command would you like to run?: ")
+                log("Running custom command on all systems", True)
                 def run():
                         decrypted_credentials = decrypt_credentials(encrypted_connection, key)
                         run_custom_command(decrypted_credentials["user"], decrypted_credentials["ip"],
@@ -618,7 +700,7 @@ def main():
                     thread.join()
 
             except FileNotFoundError:
-                print("No connections found. Use --a or -i to add new connections.")
+                print("No connections found. Use -a or -i to add new connections.")
             except KeyboardInterrupt:
                 exit()
 
@@ -645,7 +727,7 @@ def main():
                     thread.join()
 
             except FileNotFoundError:
-                print("No connections found. Use --a or -i to add new connections.")
+                print("No connections found. Use -a or -i to add new connections.")
                 log("Update failed, connections file not found", False)
             except KeyboardInterrupt:
                 log("Update cancelled, keyboard interrupt", False)
