@@ -2,7 +2,7 @@ TODO list
 
 check spelling/ continuity in wording
 make readme/ howto guide
-add check so it does not add already existing connections
+    add check so it does not add already existing connections
     add abillity to filter connections (black/ whitelist)
     add abillity to run custom commands
     logging
