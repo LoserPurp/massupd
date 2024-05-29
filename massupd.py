@@ -13,6 +13,7 @@ from collections import deque
 import os
 import yaml
 
+
 script_directory = os.path.dirname(os.path.abspath(__file__))
 os.chdir(script_directory)
 
@@ -338,22 +339,27 @@ def remove_connection(key, ip):
 
 def check_key(key):
     check_key = ""
-    try:
-        with open('key.txt', "r") as file:
-            check_key = file.read()
-    except FileNotFoundError:
+
+    def new_key():
         with open('key.txt', "w") as file:
             check_key = encrypt_credentials(key, key)
             file.write(check_key)
-    try:
-        cipher_suite = Fernet(key)
-        encrypted_credentials_bytes = base64.b64decode(check_key)
-        decrypted_credentials = cipher_suite.decrypt(encrypted_credentials_bytes)
-        decrypted_credentials_str = decrypted_credentials.decode('utf-8')
-        return json.loads(decrypted_credentials_str.replace("'", "\""))
-    except:
-        return False
+            return check_key
 
+    try:
+        with open('key.txt', "r") as file:
+            check_key = file.read()
+            if not check_key:
+                check_key = new_key()
+    except FileNotFoundError:
+        check_key = new_key()
+
+    cipher_suite = Fernet(key)
+    encrypted_credentials_bytes = base64.b64decode(check_key)
+    decrypted_credentials = cipher_suite.decrypt(encrypted_credentials_bytes)
+    decrypted_credentials_str = decrypted_credentials.decode('utf-8')
+
+    return json.loads(decrypted_credentials_str.replace("'", "\""))
 
 
 def read_log(number_of_lines):
@@ -480,6 +486,7 @@ def main():
         parser.add_argument("-r", "--remove", action="store_true", help="Remove connection by ip")
         parser.add_argument("-t", "--test", action="store_true", help="Test all connections")
         parser.add_argument("-u", "--user-command", action="store_true", help="Run a user defined command")
+        parser.add_argument("-w", "--wipe", action="store_true", help="Wipes all the connections")
 
         args = parser.parse_args()
 
@@ -513,10 +520,39 @@ def main():
                 else:
                     global filters
                     filters = {
-                        "filter" : args.filter,
-                        "filtering" : input("What do you want to filter? (IP, user, port, password, passwordSudo or manager) "),
-                        "value" : input("Choose a value to filter ")
+                        "filer" : args.filter,
+                        "filtering" : "",
+                        "value" : ""
                     }
+
+                    attribute_mapping = {
+                    1: "ip",
+                    2: "user",
+                    3: "port",
+                    4: "password",
+                    5: "passwordSudo",
+                    6: "manager",
+                    7: "exit"
+                    }
+
+                    print("\n"
+                        "1) IP\n"
+                        "2) User\n"
+                        "3) Port\n"
+                        "4) Password\n"
+                        "5) Passwordless Sudo [Y/n]\n"
+                        "6) Password Manager\n"
+                        "7) Exit\n")
+                    
+                    while True:
+                        temp = input("Choose an option filter ")
+                        if temp in range(1,7):
+                            if temp == 7:
+                                exit()
+                            filters["filtering"] = attribute_mapping[temp]
+                        else:
+                            print("Value must be between 1-7")
+                filters["value"] = input("Choose a value to filter ")
                 break
 
 
@@ -703,6 +739,18 @@ def main():
                 print("No connections found. Use -a or -i to add new connections.")
             except KeyboardInterrupt:
                 exit()
+
+
+        elif args.wipe:
+            files = ["connections.json", "key.txt"]
+
+            for file in files:
+                print(file)
+                try:
+                    with open(file, 'w') as f:
+                        f.write('')
+                except Exception as e:
+                    print(f"Error: Unable to remove {file}. {e}")
 
 
         else:
