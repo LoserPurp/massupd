@@ -378,21 +378,18 @@ def run_custom_command(user, ip, port, password, sudo_password, command, manager
 
         if not filters:
             ssh.connect(ip, username=user, password=password, port=port)
-            log(f"Custom command [{command}] on {ip} ran successfully", False)
-            print(f"Custom command on {ip} ran successfully")
-
+            
         elif filters["filter"] in ['w', 'wl', 'whitelist'] and filters["filtering"] in check and filters["value"] in check2:
             ssh.connect(ip, username=user, password=password, port=port)
-            log(f"Custom command [{command}] on {ip} ran successfully", False)
-            print(f"Custom command on {ip} ran successfully")
 
         elif filters["filter"] in ['b', 'bl', 'blacklist'] and filters["filtering"] in check and filters["value"] not in check2:
             ssh.connect(ip, username=user, password=password, port=port)
-            log(f"Custom command [{command}] on {ip} ran successfully", False)
-            print(f"Custom command on {ip} ran successfully")
 
         else:
             return
+        
+        log(f"Custom command [{command}] on {ip} ran successfully", False)
+        print(f"Custom command on {ip} ran successfully")
 
         stdin, stdout, stderr = ssh.exec_command(f'{command}\n', get_pty=True)
 
@@ -412,7 +409,7 @@ def run_custom_command(user, ip, port, password, sudo_password, command, manager
             log(f'Error closing SSH connection: {e}', True)
 
 
-def loop_add(key):
+def loop_add(key, list_file):
     new_connection = {}
     all_connection_ips = []
 
@@ -434,7 +431,7 @@ def loop_add(key):
             json.dump(encrypted_data, file)
 
     try:
-        with open("list.json", "r") as file:
+        with open(list_file, "r") as file:
             cons = json.load(file)
     except Exception as e:
         log(f'Error importing connections from file, {e}', True)
@@ -455,32 +452,40 @@ def loop_add(key):
             else:
                 print(f'{ip} was skipped because a connection with that same ip already exists')
 
-    if cons["connections"]:
-        log(f'Importing {len(cons["connections"])} connections with seperate credentials', False)
-        for connection in cons["connections"]:
-            new_connection = {
-                "user": connection["user"],
-                "ip": connection["ip"],
-                "port": connection["port"],
-                "password": connection["password"],
-                "passwordSudo": connection["passwordSudo"],
-                "manager": connection["manager"],
-            }
-            if connection["ip"] not in all_connection_ips:
-                add()
-                log(f'Added connection: {connection["user"]}@{connection["ip"]}:{connection["port"]} using {connection["manager"]}', True)
-            else:
-                print(f'{connection["ip"]} was skipped because a connection with that same ip already exists')
+    try:
+        if cons["connections"]:
+            log(f'Importing {len(cons["connections"])} connections with seperate credentials', False)
+            for connection in cons["connections"]:
+                new_connection = {
+                    "user": connection["user"],
+                    "ip": connection["ip"],
+                    "port": connection["port"],
+                    "password": connection["password"],
+                    "passwordSudo": connection["passwordSudo"],
+                    "manager": connection["manager"],
+                }
+                if connection["ip"] not in all_connection_ips:
+                    add()
+                    log(f'Added connection: {connection["user"]}@{connection["ip"]}:{connection["port"]} using {connection["manager"]}', True)
+                else:
+                    print(f'{connection["ip"]} was skipped because a connection with that same ip already exists')
+    except:
+        pass
+
+
+class CustomHelpFormatter(argparse.HelpFormatter):
+    def add_usage(self, usage, actions, groups, prefix=None):
+        pass
 
 def main():
     try:
-        parser = argparse.ArgumentParser(description="Update Linux systems and manage connections.", add_help=False,)
+        parser = argparse.ArgumentParser(description="Update Linux systems and manage connections.", formatter_class=CustomHelpFormatter, add_help=False,)
         parser.add_argument("-a", "--add", action="store_true", help="Add one or more new connections")
         parser.add_argument("-c", "--connections", action="store_true", help="List all connections")
         parser.add_argument("-e", "--edit", action="store_true", help="Edit one or more connection")
         parser.add_argument("-f", "--filter", action="store", help="Filter out connections")
         parser.add_argument("-h", "--help", action="help", help="Shows this message")
-        parser.add_argument("-i", "--import-list", action="store_true", help="import connections from list")
+        parser.add_argument("-i", "--import-list", nargs='?', const='/usr/lib/massupd/list.json', default=None, help="import connections from list")
         parser.add_argument("-l", "--log", nargs='?', const=25, default=None, help="Reads last 'n' lines in log file (default / blank is 25)")
         parser.add_argument("-k", "--key", action="store", help="Run script with key inn command")
         parser.add_argument("-r", "--remove", action="store_true", help="Remove connection by ip")
@@ -518,42 +523,48 @@ def main():
                 if args.filter not in ['w', 'b', 'white', 'black', 'whitelist', 'blacklist', 'wl', 'bl']:
                     print('Filter must be white or blacklist (w/b)')
                 else:
-                    global filters
-                    filters = {
-                        "filer" : args.filter,
-                        "filtering" : "",
-                        "value" : ""
-                    }
+                    break
 
-                    attribute_mapping = {
-                    1: "ip",
-                    2: "user",
-                    3: "port",
-                    4: "password",
-                    5: "passwordSudo",
-                    6: "manager",
-                    7: "exit"
-                    }
+            global filters
+            filters = {
+                "filter" : args.filter,
+                "filtering" : "",
+                "value" : ""
+            }
 
-                    print("\n"
-                        "1) IP\n"
-                        "2) User\n"
-                        "3) Port\n"
-                        "4) Password\n"
-                        "5) Passwordless Sudo [Y/n]\n"
-                        "6) Password Manager\n"
-                        "7) Exit\n")
-                    
-                    while True:
-                        temp = input("Choose an option filter ")
-                        if temp in range(1,7):
-                            if temp == 7:
-                                exit()
-                            filters["filtering"] = attribute_mapping[temp]
-                        else:
-                            print("Value must be between 1-7")
-                filters["value"] = input("Choose a value to filter ")
-                break
+            attribute_mapping = {
+            1: "ip",
+            2: "user",
+            3: "port",
+            4: "password",
+            5: "passwordSudo",
+            6: "manager",
+            7: "exit"
+            }
+
+            print("\n"
+                "1) IP\n"
+                "2) User\n"
+                "3) Port\n"
+                "4) Password\n"
+                "5) Passwordless Sudo [Y/n]\n"
+                "6) Password Manager\n"
+                "7) Exit\n")
+            
+            try:
+                while True:
+                    temp = int(input("Enter an option from 1-7: "))
+                    if temp:
+                        break
+                if 1 <= temp <= 7:
+                    if temp == 7:
+                        exit()
+                    filters["filtering"] = attribute_mapping[temp]
+                    filters["value"] = input("Choose a value to filter ")
+                else:
+                    print("Invalid input. Please enter a number between 1 and 7.")
+            except ValueError:
+                pass
 
 
         if args.add:
@@ -579,7 +590,7 @@ def main():
 
         elif args.import_list:
             log("Starting script with import function", False)
-            loop_add(key)
+            loop_add(key, args.import_list)
 
 
         elif args.remove:
