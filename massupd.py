@@ -13,6 +13,7 @@ from collections import deque
 import os
 import yaml
 
+current_directory = os.getcwd()
 
 script_directory = os.path.dirname(os.path.abspath(__file__))
 os.chdir(script_directory)
@@ -120,6 +121,7 @@ def update_system(user, ip, port, password, package_manager, sudo_password):
 
 
 def test_connection(user, ip, port, password, sudo_password, manager):
+    command = "whoami"
     try:
         check = ['user', 'ip', 'port', 'password', 'passwordSudo', 'manager']
         check2 = [user, ip, port, password, sudo_password, manager]
@@ -139,7 +141,10 @@ def test_connection(user, ip, port, password, sudo_password, manager):
         else:
             return
 
-        stdin, stdout, stderr = ssh.exec_command('sudo whoami\n', get_pty=True)
+        if user != "root":
+            command = "sudo "+ command
+
+        stdin, stdout, stderr = ssh.exec_command(f'{command}\n', get_pty=True)
         log(f"test on {ip} was successfull", False)
 
         if not sudo_password == 'y' or 'yes':
@@ -354,10 +359,13 @@ def check_key(key):
     except FileNotFoundError:
         check_key = new_key()
 
-    cipher_suite = Fernet(key)
-    encrypted_credentials_bytes = base64.b64decode(check_key)
-    decrypted_credentials = cipher_suite.decrypt(encrypted_credentials_bytes)
-    decrypted_credentials_str = decrypted_credentials.decode('utf-8')
+    try:
+        cipher_suite = Fernet(key)
+        encrypted_credentials_bytes = base64.b64decode(check_key)
+        decrypted_credentials = cipher_suite.decrypt(encrypted_credentials_bytes)
+        decrypted_credentials_str = decrypted_credentials.decode('utf-8')
+    except:
+        return False
 
     return json.loads(decrypted_credentials_str.replace("'", "\""))
 
@@ -486,12 +494,13 @@ def main():
         parser.add_argument("-f", "--filter", action="store", help="Filter out connections")
         parser.add_argument("-h", "--help", action="help", help="Shows this message")
         parser.add_argument("-i", "--import-list", nargs='?', const='/usr/lib/massupd/list.json', default=None, help="import connections from list")
-        parser.add_argument("-l", "--log", nargs='?', const=25, default=None, help="Reads last 'n' lines in log file (default / blank is 25)")
         parser.add_argument("-k", "--key", action="store", help="Run script with key inn command")
+        parser.add_argument("-l", "--log", nargs='?', const=25, default=None, help="Reads last 'n' lines in log file (default / blank is 25)")
         parser.add_argument("-r", "--remove", action="store_true", help="Remove connection by ip")
         parser.add_argument("-t", "--test", action="store_true", help="Test all connections")
         parser.add_argument("-u", "--user-command", action="store_true", help="Run a user defined command")
         parser.add_argument("-w", "--wipe", action="store_true", help="Wipes all the connections")
+        parser.add_argument("-x", "--export", action="store_true", help="Saves all connections as a unencrypted json file")
 
         args = parser.parse_args()
 
@@ -560,7 +569,10 @@ def main():
                     if temp == 7:
                         exit()
                     filters["filtering"] = attribute_mapping[temp]
-                    filters["value"] = input("Choose a value to filter ")
+                    if filters["filtering"] == "password":
+                        filters["value"] = getpass.getpass("Choose a value to filter: ")
+                    else:
+                        filters["value"] = input("Choose a value to filter: ")
                 else:
                     print("Invalid input. Please enter a number between 1 and 7.")
             except ValueError:
@@ -662,7 +674,11 @@ def main():
                         pass
 
                 while True:
-                    change = input("What would you like to change it to?: ")
+                    if attribute == "password":
+                        change = getpass.getpass("What would you like to change it to?: ")
+                    else:
+                        change = input("What would you like to change it to?: ")
+
                     if attribute == "port" and not change.isnumeric():
                         print("Port must be a number")
                     elif attribute == "passwordSudo" and change.lower() not in ['y', 'n', 'yes', 'no']:
@@ -756,12 +772,28 @@ def main():
             files = ["connections.json", "key.txt"]
 
             for file in files:
-                print(file)
                 try:
                     with open(file, 'w') as f:
                         f.write('')
                 except Exception as e:
                     print(f"Error: Unable to remove {file}. {e}")
+
+
+        elif args.export:
+            data = []
+
+            with open(encrypted_data_file, "r") as file:
+                encrypted_data = json.load(file)
+
+            for con in encrypted_data:
+                data.append(decrypt_credentials(con, key))
+
+            output_dict = {"connections": data}
+            export_string = json.dumps(output_dict, indent=4)
+            export_string = export_string.replace('"', '')
+
+            with open(f'{current_directory}/export.json', "w") as file:
+                file.write(export_string)
 
 
         else:
