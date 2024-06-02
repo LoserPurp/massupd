@@ -395,7 +395,7 @@ def run_custom_command(user, ip, port, password, sudo_password, command, manager
 
         else:
             return
-        
+
         log(f"Custom command [{command}] on {ip} ran successfully", False)
         print(f"Custom command on {ip} ran successfully")
 
@@ -439,26 +439,29 @@ def loop_add(key, list_file):
             json.dump(encrypted_data, file)
 
     try:
-        with open(list_file, "r") as file:
+        with open(f"{current_directory}/{list_file}", "r") as file:
             cons = json.load(file)
     except Exception as e:
         log(f'Error importing connections from file, {e}', True)
-    if cons["loop"] == True:
-        for ip in cons["ips"]:
-            new_connection = {
-                "user": cons["creds"]["user"],
-                "ip": ip,
-                "port": cons["creds"]["port"],
-                "password": cons["creds"]["password"],
-                "passwordSudo": cons["creds"]["passwordSudo"],
-                "manager": cons["creds"]["manager"],
-            }
-            if ip not in all_connection_ips:
-                add()
-                log(f'Importing {len(cons["ips"])} connections with shared credentials', False)
-                log(f'Added connection: {cons["creds"]["user"]}@{ip}:{cons["creds"]["port"]} using {cons["creds"]["manager"]}', True)
-            else:
-                print(f'{ip} was skipped because a connection with that same ip already exists')
+    try:
+        if cons["loop"]:
+            for ip in cons["ips"]:
+                new_connection = {
+                    "user": cons["creds"]["user"],
+                    "ip": ip,
+                    "port": cons["creds"]["port"],
+                    "password": cons["creds"]["password"],
+                    "passwordSudo": cons["creds"]["passwordSudo"],
+                    "manager": cons["creds"]["manager"],
+                }
+                if ip not in all_connection_ips:
+                    add()
+                    log(f'Importing {len(cons["ips"])} connections with shared credentials', False)
+                    log(f'Added connection: {cons["creds"]["user"]}@{ip}:{cons["creds"]["port"]} using {cons["creds"]["manager"]}', True)
+                else:
+                    print(f'{ip} was skipped because a connection with that same ip already exists')
+    except:
+        pass
 
     try:
         if cons["connections"]:
@@ -542,13 +545,13 @@ def main():
             }
 
             attribute_mapping = {
-            1: "ip",
-            2: "user",
-            3: "port",
-            4: "password",
-            5: "passwordSudo",
-            6: "manager",
-            7: "exit"
+                1: "ip",
+                2: "user",
+                3: "port",
+                4: "password",
+                5: "passwordSudo",
+                6: "manager",
+                7: "exit"
             }
 
             print("\n"
@@ -559,7 +562,7 @@ def main():
                 "5) Passwordless Sudo [Y/n]\n"
                 "6) Password Manager\n"
                 "7) Exit\n")
-            
+
             try:
                 while True:
                     temp = int(input("Enter an option from 1-7: "))
@@ -714,7 +717,7 @@ def main():
                     if not encrypted_data:
                         print("No connections found. Use -a or -i to add new connections.")
                         return
-                log("Staring test on all connections", True)    
+                log("Staring test on all connections", True)
 
                 def run():
                         decrypted_credentials = decrypt_credentials(encrypted_connection, key)
@@ -782,18 +785,24 @@ def main():
         elif args.export:
             data = []
 
-            with open(encrypted_data_file, "r") as file:
-                encrypted_data = json.load(file)
+            try:
+                with open(encrypted_data_file, "r") as file:
+                    encrypted_data = json.load(file)
+            except:
+                log("Error: Could not open connection file", True)
+                exit()
 
             for con in encrypted_data:
                 data.append(decrypt_credentials(con, key))
 
             output_dict = {"connections": data}
             export_string = json.dumps(output_dict, indent=4)
-            export_string = export_string.replace('"', '')
 
-            with open(f'{current_directory}/export.json', "w") as file:
-                file.write(export_string)
+            try:
+                with open(f'{current_directory}/export.json', "w") as file:
+                    file.write(export_string)
+            except Exception as e:
+                log(f"Error: Could not save to file, {e}", True)
 
 
         else:
@@ -820,10 +829,6 @@ def main():
             except FileNotFoundError:
                 print("No connections found. Use -a or -i to add new connections.")
                 log("Update failed, connections file not found", False)
-            except KeyboardInterrupt:
-                log("Update cancelled, keyboard interrupt", False)
-                exit()
-
 
 
     except KeyboardInterrupt:
