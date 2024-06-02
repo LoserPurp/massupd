@@ -38,7 +38,7 @@ def derive_key(passphrase, salt=b'salt1234', iterations=100000):
 def encrypt_credentials(credentials, key):
     cipher_suite = Fernet(key)
     encrypted_credentials = cipher_suite.encrypt(json.dumps(credentials).encode())
-    
+
     return base64.b64encode(encrypted_credentials).decode('utf-8')
 
 
@@ -386,7 +386,7 @@ def run_custom_command(user, ip, port, password, sudo_password, command, manager
 
         if not filters:
             ssh.connect(ip, username=user, password=password, port=port)
-            
+
         elif filters["filter"] in ['w', 'wl', 'whitelist'] and filters["filtering"] in check and filters["value"] in check2:
             ssh.connect(ip, username=user, password=password, port=port)
 
