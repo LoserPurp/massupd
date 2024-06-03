@@ -18,11 +18,20 @@ current_directory = os.getcwd()
 script_directory = os.path.dirname(os.path.abspath(__file__))
 os.chdir(script_directory)
 
+try:
+    with open("conf.yaml", "r") as file:
+        global conf
+        conf = yaml.safe_load(file)
+except Exception as e:
+    print(f'Error reading manager file, {e}')
+    exit()
+
+
 filters = {}
-encrypted_data_file = "connections.json"
+encrypted_data_file = conf["conFile"]
 
 
-def derive_key(passphrase, salt=b'salt1234', iterations=100000):
+def derive_key(passphrase, salt=conf["salt"].encode(), iterations=100000):
     passphrase_bytes = passphrase.encode('utf-8')
     kdf = PBKDF2HMAC(
         algorithm=hashes.SHA256(),
@@ -56,7 +65,7 @@ def decrypt_credentials(encrypted_credentials, key):
 
 def get_managers():
     try:
-        with open("managers.yaml", "r") as file:
+        with open(conf["managerFile"], "r") as file:
             managers = yaml.safe_load(file)
             return(managers)
     except Exception as e:
@@ -121,7 +130,7 @@ def update_system(user, ip, port, password, package_manager, sudo_password):
 
 
 def test_connection(user, ip, port, password, sudo_password, manager):
-    command = "whoami"
+    command = conf["whoami"]
     try:
         check = ['user', 'ip', 'port', 'password', 'passwordSudo', 'manager']
         check2 = [user, ip, port, password, sudo_password, manager]
@@ -371,7 +380,7 @@ def check_key(key):
 
 
 def read_log(number_of_lines):
-    with open('log', 'r') as file:
+    with open(conf["logFile"], 'r') as file:
         last_n_lines = deque(file, maxlen=int(number_of_lines))
     return list(last_n_lines)
 
@@ -439,7 +448,14 @@ def loop_add(key, list_file):
             json.dump(encrypted_data, file)
 
     try:
-        with open(f"{current_directory}/{list_file}", "r") as file:
+        if list_file == conf["listFile"]:
+            direc = list_file
+        elif list_file.startswith("/"):
+            direc = list_file
+        else:
+            direc = f"{current_directory}/{list_file}"
+
+        with open(direc, "r") as file:
             cons = json.load(file)
     except Exception as e:
         log(f'Error importing connections from file, {e}', True)
@@ -496,7 +512,7 @@ def main():
         parser.add_argument("-e", "--edit", action="store_true", help="Edit one or more connection")
         parser.add_argument("-f", "--filter", action="store", help="Filter out connections")
         parser.add_argument("-h", "--help", action="help", help="Shows this message")
-        parser.add_argument("-i", "--import-list", nargs='?', const='/usr/lib/massupd/list.json', default=None, help="import connections from list")
+        parser.add_argument("-i", "--import-list", nargs='?', const=conf["listFile"], default=None, help="import connections from list")
         parser.add_argument("-k", "--key", action="store", help="Run script with key inn command")
         parser.add_argument("-l", "--log", nargs='?', const=25, default=None, help="Reads last 'n' lines in log file (default / blank is 25)")
         parser.add_argument("-r", "--remove", action="store_true", help="Remove connection by ip")
@@ -772,7 +788,7 @@ def main():
 
 
         elif args.wipe:
-            files = ["connections.json", "key.txt"]
+            files = [conf["conFile"], conf["keyFile"]]
 
             for file in files:
                 try:

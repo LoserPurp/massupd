@@ -1,0 +1,7 @@
+salt: salt1234
+testCommand: whoami
+logFile: log
+listFile: /usr/lib/massups/list.json
+conFile: connections.json
+managerFile: mangers.yaml
+keyFile: key.txt
