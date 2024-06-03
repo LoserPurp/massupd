@@ -570,7 +570,8 @@ def main():
                 7: "exit"
             }
 
-            print("\n"
+            print("Filters:\n"
+                "\n"
                 "1) IP\n"
                 "2) User\n"
                 "3) Port\n"
