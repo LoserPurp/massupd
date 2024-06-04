@@ -77,7 +77,7 @@ def log(msg, to_console):
         if to_console:
             print(msg)
         try:
-            with open('log', 'a') as file:
+            with open(conf["logFile"], 'a') as file:
                 file.write(f'{datetime.now().strftime("[%d.%m.%Y %H:%M:%S]")} - {msg} \n')
         except Exception as e:
             print(f"An error with the log occurred: {e}")
@@ -362,13 +362,13 @@ def check_key(key):
     check_key = ""
 
     def new_key():
-        with open('key.txt', "w") as file:
+        with open(conf["keyFile"], "w") as file:
             check_key = encrypt_credentials(key, key)
             file.write(check_key)
             return check_key
 
     try:
-        with open('key.txt', "r") as file:
+        with open(conf["keyFile"], "r") as file:
             check_key = file.read()
             if not check_key:
                 check_key = new_key()
@@ -830,7 +830,7 @@ def main():
             export_string = json.dumps(output_dict, indent=4)
 
             try:
-                with open(f'{current_directory}/export.json', "w") as file:
+                with open(f'{current_directory}/{conf["exportFile"]}', "w") as file:
                     file.write(export_string)
             except Exception as e:
                 log(f"Error: Could not save to file, {e}", True)
