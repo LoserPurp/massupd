@@ -104,10 +104,6 @@ def update_system(user, ip, port, password, package_manager, sudo_password):
         else:
             return
 
-        ssh = paramiko.SSHClient()
-        ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-        ssh.connect(ip, username=user, password=password, port=port)
-
         if package_manager in managers:
             stdin, stdout, stderr = ssh.exec_command(f'{managers[package_manager]}\n', get_pty=True)
         else:
@@ -118,11 +114,19 @@ def update_system(user, ip, port, password, package_manager, sudo_password):
             stdin.write(password + '\n')
             stdin.flush()
 
-        log(f"Update started on {ip}, this may take a while.", True)
-        while not stdout.channel.exit_status_ready():
-            time.sleep(1)
+        log(f"Update started on {ip}, this may take a while.", True)        
+        stdout.channel.recv_exit_status()
+        exit_code = str(stdout.channel.recv_exit_status())
+        print("Exit code: ",exit_code)
 
-        log(f"Update on {ip} using {package_manager} completed.", True)
+        if exit_code != '0':
+            if exit_code == '1':
+                log(f'Error updating connection {ip}: (Exit code {exit_code}) Is the manager correct?', True)
+            else:
+                log(f'Error updating connection {ip}: (Exit code {exit_code})', True)
+        else:
+            log(f"Update on {ip} using {package_manager} completed.", True)
+
     except Exception as e:
         log(f"Error updating {ip}, {e}", True)
     finally:
@@ -130,7 +134,7 @@ def update_system(user, ip, port, password, package_manager, sudo_password):
 
 
 def test_connection(user, ip, port, password, sudo_password, manager):
-    command = conf["whoami"]
+    command = conf["testCommand"]
     try:
         check = ['user', 'ip', 'port', 'password', 'passwordSudo', 'manager']
         check2 = [user, ip, port, password, sudo_password, manager]
@@ -154,16 +158,19 @@ def test_connection(user, ip, port, password, sudo_password, manager):
             command = "sudo "+ command
 
         stdin, stdout, stderr = ssh.exec_command(f'{command}\n', get_pty=True)
-        log(f"test on {ip} was successfull", False)
 
         if not sudo_password == 'y' or 'yes':
             stdin.write(password + '\n')
             stdin.flush()
 
-        while not stdout.channel.exit_status_ready():
-            time.sleep(1)
+        stdout.channel.recv_exit_status()
+        exit_code = str(stdout.channel.recv_exit_status())
 
-        log(f"Test on {ip} was successful", True)
+        if exit_code != '0':
+            log(f'Error testing connection {ip}: (Exit code {exit_code})', True)
+        else:
+            log(f"Test on {ip} was successful", True)
+
     except Exception as e:
         log(f'Error testing connection {ip}: {e}', True)
     finally:
@@ -385,7 +392,7 @@ def read_log(number_of_lines):
     return list(last_n_lines)
 
 
-def run_custom_command(user, ip, port, password, sudo_password, command, manager):
+def run_custom_command(user, ip, port, password, sudo_password, command, manager, filters=None):
     try:
         check = ['user', 'ip', 'port', 'password', 'passwordSudo', 'manager']
         check2 = [user, ip, port, password, sudo_password, manager]
@@ -395,27 +402,27 @@ def run_custom_command(user, ip, port, password, sudo_password, command, manager
 
         if not filters:
             ssh.connect(ip, username=user, password=password, port=port)
-
         elif filters["filter"] in ['w', 'wl', 'whitelist'] and filters["filtering"] in check and filters["value"] in check2:
             ssh.connect(ip, username=user, password=password, port=port)
-
         elif filters["filter"] in ['b', 'bl', 'blacklist'] and filters["filtering"] in check and filters["value"] not in check2:
             ssh.connect(ip, username=user, password=password, port=port)
-
         else:
+            log("Filter conditions not met, command not executed", True)
             return
 
-        log(f"Custom command [{command}] on {ip} ran successfully", False)
-        print(f"Custom command on {ip} ran successfully")
-
-        stdin, stdout, stderr = ssh.exec_command(f'{command}\n', get_pty=True)
+        stdin, stdout, stderr = ssh.exec_command(command, get_pty=True)
 
         if command.lower().startswith('sudo') and sudo_password not in ['y', 'yes']:
             stdin.write(sudo_password + '\n')
             stdin.flush()
 
-        while not stdout.channel.exit_status_ready():
-            time.sleep(1)
+        stdout.channel.recv_exit_status()
+        exit_code = str(stdout.channel.recv_exit_status())
+
+        if exit_code != '0':
+            log(f'Error running custom command on {ip}: (Exit code {exit_code})', True)
+        else:
+            log(f"Custom command [{command}] on {ip} ran successfully", True)
 
     except Exception as e:
         log(f'Error running custom command on {ip}: {e}', True)
@@ -534,14 +541,21 @@ def main():
         if args.key:
             key = args.key
         else:
-            key = getpass.getpass("Enter decryption key: ")
+            tries = 0
+            while tries < 3:
+                key = getpass.getpass("Enter decryption key: ")
 
-        key = derive_key(key)
-        check = check_key(key)
+                key = derive_key(key)
+                check = check_key(key)
 
-        if key != check:
-            log("Error, key does not match!", True)
-            exit()
+                if key != check:
+                    print("Error, key does not match!")
+                    tries += 1
+                    if tries >= 3:
+                        log("Tried password to many times!", True)
+                        exit()
+                else:
+                    break
 
         if args.filter:
             if args.connections or args.edit or args.log:

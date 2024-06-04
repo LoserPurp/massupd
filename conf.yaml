@@ -3,5 +3,5 @@ testCommand: whoami
 logFile: log
 listFile: /usr/lib/massups/list.json
 conFile: connections.json
-managerFile: mangers.yaml
+managerFile: managers.yaml
 keyFile: key.txt
