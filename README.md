@@ -27,7 +27,8 @@ git clone https://github.com/LoserPurp/massupd.git && sudo bash massupd/install.
 ## General information
 All the connections are stored encrypted in a file called connections.json. The user sets up their own encryption key, which is wrapped (encrypted with itself) and stored inside a file called "key.txt". The wrapped key is only used to validate that the key you enter when using the tool, ensuring data safety.
 
-All activities performed by the tool are logged in a log file for easy debugging. Access the log by running: ```shell
+All activities performed by the tool are logged in a log file for easy debugging. Access the log by running: 
+```shell
 massupd -l
 ```
 

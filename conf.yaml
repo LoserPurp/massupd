@@ -5,3 +5,4 @@ listFile: /usr/lib/massups/list.json
 conFile: connections.json
 managerFile: managers.yaml
 keyFile: key.txt
+exportFile: export.json
