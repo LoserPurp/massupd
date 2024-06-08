@@ -117,7 +117,6 @@ def update_system(user, ip, port, password, package_manager, sudo_password):
         log(f"Update started on {ip}, this may take a while.", True)        
         stdout.channel.recv_exit_status()
         exit_code = str(stdout.channel.recv_exit_status())
-        print("Exit code: ",exit_code)
 
         if exit_code != '0':
             if exit_code == '1':
@@ -591,7 +590,7 @@ def main():
                 "3) Port\n"
                 "4) Password\n"
                 "5) Passwordless Sudo [Y/n]\n"
-                "6) Password Manager\n"
+                "6) Package Manager\n"
                 "7) Exit\n")
 
             try:
@@ -689,7 +688,7 @@ def main():
                       "3) Port\n"
                       "4) Password\n"
                       "5) Passwordless Sudo [Y/n]\n"
-                      "6) Password Manager\n"
+                      "6) Package Manager\n"
                       "7) Exit\n"
                       )
 
