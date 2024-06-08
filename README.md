@@ -71,7 +71,8 @@ massupd -f w
 
 Use the filter flag with another valid flag to filter out connections based on specific criteria. For instance, you can filter out all connections using the package manager apt and update only the remaining systems.
 
-<img src="https://github.com/LoserPurp/massupd/assets/99472938/e5d251c3-bff0-41bd-ad59-c713a38e2b68" width="350">
+<img src="https://github.com/LoserPurp/massupd/assets/99472938/c0f4a622-fa60-4c5b-9752-9452d74e66e7" width="350">
+
 
 Here we can see i filtered out every connection with the package manger apt. and it therefore updated the only system without that manager.
 
