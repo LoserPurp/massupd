@@ -9,6 +9,9 @@ fi
 #Navigates to the massupd folder
 cd massupd || { echo "Failed to change directory to massupd (You need to run this script outside the massupd folder)"; exit 1; }
 
+#Makes backup directory
+mkdir backup
+
 #Installs pip requirements
 if [ -f requirements.txt ]; then
   pip install -r requirements.txt || { echo "Failed to install pip requirements"; exit 1; }
@@ -31,5 +34,8 @@ mv massupd /usr/lib/massupd || { echo "Failed to move massupd folder to /usr/lib
 
 #Makes script executeable
 chmod +r /usr/bin/massupd
+
+#gives full access to massupd folder
+chmod -R 777 /usr/bin/massupd/backup
 
 echo "Installation completed successfully"
