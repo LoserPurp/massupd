@@ -514,6 +514,7 @@ def main():
     try:
         parser = argparse.ArgumentParser(description="Update Linux systems and manage connections.", formatter_class=CustomHelpFormatter, add_help=False,)
         parser.add_argument("-a", "--add", action="store_true", help="Add one or more new connections")
+        parser.add_argument("-b", "--backup", action="store", help="Makes or restore a backup")
         parser.add_argument("-c", "--connections", action="store_true", help="List all connections")
         parser.add_argument("-e", "--edit", action="store_true", help="Edit one or more connection")
         parser.add_argument("-f", "--filter", action="store", help="Filter out connections")
@@ -539,6 +540,12 @@ def main():
 
         if args.key:
             key = args.key
+            key = derive_key(key)
+            check = check_key(key)
+
+            if key != check:
+                print("Error, key does not match!")
+                exit()
         else:
             tries = 0
             while tries < 3:
@@ -631,6 +638,62 @@ def main():
 
             with open(encrypted_data_file, "w") as file:
                 json.dump(encrypted_data, file)
+
+
+        elif args.backup:
+            if not os.path.exists('./backup'):
+                try:
+                    os.mkdir('./backup')
+                    print("Backup folder was missing, created folder successfully.")
+                except Exception as e:
+                    print("Backup folder was missing, folder could not be created")
+
+            if args.backup not in ['m', 'r']:
+                print("You must choose to make or restore a backup [M/r]")
+
+            elif args.backup == 'm':
+                try:
+                    with open(encrypted_data_file, "r") as file:
+                        encrypted_data = json.load(file)
+                        if encrypted_data != []:
+                            with open(f'backup/{datetime.now().strftime("[%d.%m.%Y.%H:%M]")}.backup', 'w') as backup_file:
+                                json.dump(encrypted_data, backup_file)
+                                print(f"Made a backup of all connections")
+                        else:
+                            log("Did not make a backup, connections file is empty!", True)
+                except FileNotFoundError:
+                    log("Error, connections file not found", True)
+
+            elif args.backup == 'r':
+                print("")
+
+                files = [f for f in os.listdir('./backup') if os.path.isfile(os.path.join('./backup', f)) and f.endswith('.backup')]
+                for index, file in enumerate(files, start=1):
+                    print(f'Backup {index}: {file.split('.backup')[0]}')
+                print("")
+                try:
+                    select = int(input("Select a backup to restore: "))
+                except ValueError:
+                    print("You must select a number!")
+                    exit(1)
+                if 1 <= select <= len(files):
+                    selected_file = os.path.join('./backup', files[select - 1])
+                    try:
+                        with open(selected_file, "r") as file:
+                            backup = json.load(file)
+                            if backup != [] or not '':
+                                with open(encrypted_data_file, "w") as file:
+                                    json.dump(backup, file)
+                                    log(f"Restored from backup {selected_file.split('.backup')[0]}")
+                            else:
+                                log("Did restore backup, backup file is empty!", True)
+                    except FileNotFoundError:
+                        log("Error, backup file not found", True)
+                    except Exception as e:
+                        log(f"Error, {e}", False)
+
+                else:
+                    print("Invalid selection")
 
 
         elif args.import_list:
@@ -859,6 +922,9 @@ def main():
             except FileNotFoundError:
                 print("No connections found. Use -a or -i to add new connections.")
                 log("Update failed, connections file not found", False)
+            
+            print("\n"
+                  "Update finished")
 
 
     except KeyboardInterrupt:
