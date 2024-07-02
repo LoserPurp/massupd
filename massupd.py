@@ -721,8 +721,8 @@ def main():
                 ip = input("type the IP of the connection you would like to remove: ")
                 if ip:
                     remove_connection(key, ip)
-                    if input("Do you want to remove another connection? [Y/n] ").lower != "y":
-                        break
+                if input("Do you want to remove another connection? [Y/n] ").lower() not in ["y", "yes", ""]:
+                    break
 
 
         elif args.edit:
