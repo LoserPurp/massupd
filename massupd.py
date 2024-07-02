@@ -119,10 +119,7 @@ def update_system(user, ip, port, password, package_manager, sudo_password):
         exit_code = str(stdout.channel.recv_exit_status())
 
         if exit_code != '0':
-            if exit_code == '1':
-                log(f'Error updating connection {ip}: (Exit code {exit_code}) Is the manager correct?', True)
-            else:
-                log(f'Error updating connection {ip}: (Exit code {exit_code})', True)
+            log(f'Error updating {ip}: (Exit code {exit_code})', True)
         else:
             log(f"Update on {ip} using {package_manager} completed.", True)
 
@@ -166,12 +163,12 @@ def test_connection(user, ip, port, password, sudo_password, manager):
         exit_code = str(stdout.channel.recv_exit_status())
 
         if exit_code != '0':
-            log(f'Error testing connection {ip}: (Exit code {exit_code})', True)
+            log(f'Error testing {ip}: (Exit code {exit_code})', True)
         else:
             log(f"Test on {ip} was successful", True)
 
     except Exception as e:
-        log(f'Error testing connection {ip}: {e}', True)
+        log(f'Error testing {ip}: {e}', True)
     finally:
         ssh.close()
 
@@ -386,9 +383,15 @@ def check_key(key):
 
 
 def read_log(number_of_lines):
-    with open(conf["logFile"], 'r') as file:
-        last_n_lines = deque(file, maxlen=int(number_of_lines))
-    return list(last_n_lines)
+    if number_of_lines not in ['c','C','clear','Clear']:
+        with open(conf["logFile"], 'r') as file:
+            last_n_lines = deque(file, maxlen=int(number_of_lines))
+        return list(last_n_lines)
+    else:
+        with open("log", "w") as file:
+            file.write("")
+            print("All logs deleted")
+            exit()
 
 
 def run_custom_command(user, ip, port, password, sudo_password, command, manager, filters=None):
@@ -521,7 +524,7 @@ def main():
         parser.add_argument("-h", "--help", action="help", help="Shows this message")
         parser.add_argument("-i", "--import-list", nargs='?', const=conf["listFile"], default=None, help="import connections from list")
         parser.add_argument("-k", "--key", action="store", help="Run script with key inn command")
-        parser.add_argument("-l", "--log", nargs='?', const=25, default=None, help="Reads last 'n' lines in log file (default / blank is 25)")
+        parser.add_argument("-l", "--log", nargs='?', const=25, default=None, help="Reads last 'n' lines in log file or c to clear all logs")
         parser.add_argument("-r", "--remove", action="store_true", help="Remove connection by ip")
         parser.add_argument("-t", "--test", action="store_true", help="Test all connections")
         parser.add_argument("-u", "--user-command", action="store_true", help="Run a user defined command")
@@ -550,6 +553,7 @@ def main():
             tries = 0
             while tries < 3:
                 key = getpass.getpass("Enter decryption key: ")
+                print("")
 
                 key = derive_key(key)
                 check = check_key(key)
@@ -644,9 +648,9 @@ def main():
             if not os.path.exists('./backup'):
                 try:
                     os.mkdir('./backup')
-                    print("Backup folder was missing, created folder successfully.")
+                    log("Backup folder was missing, created folder successfully.", True)
                 except Exception as e:
-                    print("Backup folder was missing, folder could not be created")
+                    log("Backup folder was missing, folder could not be created", True)
 
             if args.backup not in ['m', 'r']:
                 print("You must choose to make or restore a backup [M/r]")
@@ -658,7 +662,7 @@ def main():
                         if encrypted_data != []:
                             with open(f'backup/{datetime.now().strftime("[%d.%m.%Y.%H:%M]")}.backup', 'w') as backup_file:
                                 json.dump(encrypted_data, backup_file)
-                                print(f"Made a backup of all connections")
+                                log(f"Made a backup of all connections", True)
                         else:
                             log("Did not make a backup, connections file is empty!", True)
                 except FileNotFoundError:
@@ -675,7 +679,7 @@ def main():
                     select = int(input("Select a backup to restore: "))
                 except ValueError:
                     print("You must select a number!")
-                    exit(1)
+                    exit()
                 if 1 <= select <= len(files):
                     selected_file = os.path.join('./backup', files[select - 1])
                     try:
@@ -684,7 +688,7 @@ def main():
                             if backup != [] or not '':
                                 with open(encrypted_data_file, "w") as file:
                                     json.dump(backup, file)
-                                    log(f"Restored from backup {selected_file.split('.backup')[0]}")
+                                    log(f"Restored from backup {selected_file.split('.backup')[0]}", True)
                             else:
                                 log("Did restore backup, backup file is empty!", True)
                     except FileNotFoundError:
@@ -717,7 +721,8 @@ def main():
                 ip = input("type the IP of the connection you would like to remove: ")
                 if ip:
                     remove_connection(key, ip)
-                    break
+                    if input("Do you want to remove another connection? [Y/n] ").lower != "y":
+                        break
 
 
         elif args.edit:
@@ -872,7 +877,7 @@ def main():
                     with open(file, 'w') as f:
                         f.write('')
                 except Exception as e:
-                    print(f"Error: Unable to remove {file}. {e}")
+                    log(f"Error: Unable to remove {file}. {e}", True)
 
 
         elif args.export:
