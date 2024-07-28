@@ -660,7 +660,7 @@ def main():
                     with open(encrypted_data_file, "r") as file:
                         encrypted_data = json.load(file)
                         if encrypted_data != []:
-                            with open(f'backup/{datetime.now().strftime("[%d.%m.%Y.%H:%M]")}.backup', 'w') as backup_file:
+                            with open(f'backup/{datetime.now().strftime("[%d.%m.%Y.%H-%M]")}.backup', 'w') as backup_file:
                                 json.dump(encrypted_data, backup_file)
                                 log(f"Made a backup of all connections", True)
                         else:
@@ -697,6 +697,8 @@ def main():
                         log(f"Error, {e}", False)
 
                 else:
+                    print("Invalid selection")
+            else:
                     print("Invalid selection")
 
 
@@ -770,7 +772,7 @@ def main():
                             break
                         else:
                             print("Invalid input. Please enter a number between 1 and 7.")
-                        
+
                     except ValueError:
                         pass
 
@@ -927,7 +929,7 @@ def main():
             except FileNotFoundError:
                 print("No connections found. Use -a or -i to add new connections.")
                 log("Update failed, connections file not found", False)
-            
+
             print("\n"
                   "Update finished")
 
