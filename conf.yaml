@@ -1,6 +1,6 @@
 salt: salt1234
 testCommand: whoami
-logFile: log
+logFile: massupd.log
 listFile: /usr/lib/massups/list.json
 conFile: connections.json
 managerFile: managers.yaml
