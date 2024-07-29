@@ -16,13 +16,15 @@ The tool has a wide range of features such as:
  - And much more
 
 ## Install
-To install MassUPD, execute the following command:
+Before you install MassUPD make sure you have python installed.
+### Linux
 ```shell
 git clone https://github.com/LoserPurp/massupd.git && sudo bash massupd/install.sh
 ```
-**Note: The install script is only for Linux systems. Windows support is coming.**
+### Windows
+Download or clone the repo and run the install.ps1 file
 
-**For Windows systems, clone the repository and run the script using Python.**
+*Make sure you enable running powershell scripts*
 
 ## General information
 All the connections are stored encrypted in a file called connections.json. The user sets up their own encryption key, which is wrapped (encrypted with itself) and stored inside a file called "key.txt". The wrapped key is only used to validate that the key you enter when using the tool, ensuring data safety.
@@ -32,17 +34,18 @@ All activities performed by the tool are logged in a log file for easy debugging
 massupd -l
 ```
 
-*Note: if you change the salt in the config file, you would need to re-encrypt the connections.*
+*Note: if you change the salt in the config file, you would need to re-encrypt existing connections.*
 
 ## How to use
-IMPORTANT: before you use the tool remember to change the salt inside the "conf.yaml" file. It will be located in ```/usr/bin/massupd``` if you used the install script, or in the project folder if you did not.
+IMPORTANT: before you use the tool remember to change the salt inside the "conf.yaml" file.
 
 ### Flags
 Running the tool without any flags starts the updating process.
 
 **Here are a list of all the different flags and what they do**
-```shell
+```
   -a, --add                                        Add one or more new connections
+  -b BACKUP, --backup BACKUP                       Makes or restore a backup
   -c, --connections                                List all connections
   -e, --edit                                       Edit one or more connection
   -f FILTER, --filter FILTER                       Filter out connections
@@ -74,10 +77,10 @@ Use the filter flag with another valid flag to filter out connections based on s
 <img src="https://github.com/LoserPurp/massupd/assets/99472938/c0f4a622-fa60-4c5b-9752-9452d74e66e7" width="350">
 
 
-Here we can see i filtered out every connection with the package manger apt. and it therefore updated the only system without that manager.
+Here is an example that filters out every connection with the package manger apt. and therefore updates only systems without that manager.
 
 The filter option can be used with --key (-k), --user-command (-u), --test (-t), and without another flag.<br>
-*the default without a flag is to update all systems*
+*Running the command without a flag will update all systems*
 
 ### Using -i or --import-list
 ```shell
@@ -147,12 +150,23 @@ massupd -w
 ```
 Restores everything to default settings, except configurations made in the config files.
 
+### Using -b or --backup
+The backup function will make a copy of all the connections to be restored later or moved to another system 
+
+```shell
+massupd -b m
+```
+*Makes a new backup*
+```shell
+massupd -b r
+```
+*Restores connetions from a backup*
+
+
 ## Configuration
 There are two yaml files used for configuring the tool.
 - managers.yaml
 - conf.yaml
-
-These will be located in ```/usr/bin/massupd``` (If the linux install script was used)
 
 **Mangers.yaml**
 ```yaml
@@ -175,6 +189,16 @@ keyFile: key.txt
 ```
 This file contains settings such as the salt for encryption, the command for testing connections, and file paths. It is crucial to change the salt to something random and complex.
 
+## File paths
+### Paths for script and config files
+Linux path: ```/usr/lib/massupd```
+
+Windows path: ```C:\Program Files\massupd```
+
+### Path for the wrapper scripts
+Linux path: ```/usr/bin/massupd```
+
+Windows path: ```C:\Windows\massupd.bat```
 
 ## Extra
 MassUPD is still under development. If you encounter any bugs, issues, or have feature requests, please let me know.
