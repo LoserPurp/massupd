@@ -574,6 +574,7 @@ def main():
             while True:
                 if args.filter not in ['w', 'b', 'white', 'black', 'whitelist', 'blacklist', 'wl', 'bl']:
                     print('Filter must be white or blacklist (w/b)')
+                    exit(1)
                 else:
                     break
 
