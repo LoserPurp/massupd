@@ -1,7 +1,7 @@
 
 connections.json
 log
-key.txt
+key*
 list.json
 /backup
 massupd.log
