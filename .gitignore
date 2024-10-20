@@ -5,3 +5,4 @@ key*
 list.json
 /backup
 massupd.log
+*.old
