@@ -224,7 +224,7 @@ def add_new_connection(key):
             print("Password can not be blank")
 
     while True:
-        sudo_password = input("Passwordless sudo? [Y/n]: ").lower()
+        sudo_password = input("Passwordless sudo? [y/n]: ").lower()
         if sudo_password in ['y', 'n', '', 'yes', 'no']:
             break
         else:
@@ -525,6 +525,7 @@ def main():
         parser.add_argument("-i", "--import-list", nargs='?', const=conf["listFile"], default=None, help="import connections from list")
         parser.add_argument("-k", "--key", action="store", help="Run script with key inn command")
         parser.add_argument("-l", "--log", nargs='?', const=25, default=None, help="Reads last 'n' lines in log file or c to clear all logs")
+        parser.add_argument("-n", "--new-key", action="store_true", help="Sets a new dectryption key")
         parser.add_argument("-r", "--remove", action="store_true", help="Remove connection by ip")
         parser.add_argument("-t", "--test", action="store_true", help="Test all connections")
         parser.add_argument("-u", "--user-command", action="store_true", help="Run a user defined command")
@@ -601,7 +602,7 @@ def main():
                 "2) User\n"
                 "3) Port\n"
                 "4) Password\n"
-                "5) Passwordless Sudo [Y/n]\n"
+                "5) Passwordless Sudo [y/n]\n"
                 "6) Package Manager\n"
                 "7) Exit\n")
 
@@ -637,7 +638,7 @@ def main():
                 encrypted_connection = encrypt_credentials(new_connection, key)
                 encrypted_data.append(encrypted_connection)
 
-                add_another = input("Do you want to add another system? [Y/n]: ")
+                add_another = input("Do you want to add another system? [y/N]: ")
                 if add_another.lower() in ["no", "n", ""]:
                     break
 
@@ -724,7 +725,7 @@ def main():
                 ip = input("type the IP of the connection you would like to remove: ")
                 if ip:
                     remove_connection(key, ip)
-                if input("Do you want to remove another connection? [Y/n] ").lower() not in ["y", "yes", ""]:
+                if input("Do you want to remove another connection? [y/N] ").lower() in ["n", "no", ""]:
                     break
 
 
@@ -758,7 +759,7 @@ def main():
                       "2) User\n"
                       "3) Port\n"
                       "4) Password\n"
-                      "5) Passwordless Sudo [Y/n]\n"
+                      "5) Passwordless Sudo [y/n]\n"
                       "6) Package Manager\n"
                       "7) Exit\n"
                       )
@@ -786,14 +787,14 @@ def main():
                     if attribute == "port" and not change.isnumeric():
                         print("Port must be a number")
                     elif attribute == "passwordSudo" and change.lower() not in ['y', 'n', 'yes', 'no']:
-                        print("Value must be Yes or No [Y/n]")
+                        print("Value must be Yes or No [y/n]")
                     elif attribute == "manager" and change not in managers:
                         print(f"{attribute} is not in manager list")
                     else:
                         edit_credentials(key, ip, attribute, change)
                         break
 
-                add_another = input("Do you want to change another connection? [Y/n]: ")
+                add_another = input("Do you want to change another connection? [y/N]: ")
                 if add_another.lower() in ["no", "n", ""]:
                     break
 
@@ -904,6 +905,47 @@ def main():
                     file.write(export_string)
             except Exception as e:
                 log(f"Error: Could not save to file, {e}", True)
+
+
+        elif args.new_key:
+            new_key = derive_key(getpass.getpass("Enter new key:"))
+
+            def reencrypt(file_path):
+                new_connections = []
+                try:
+                    with open(file_path, "r") as f:
+                        encrypted_data = json.load(f)
+                except FileNotFoundError:
+                    encrypted_data = []
+
+                for con in encrypted_data:
+                    decrypted_data = decrypt_credentials(con, key)
+                    new_connection = {
+                        "user": decrypted_data["user"],
+                        "ip": decrypted_data["ip"],
+                        "port": decrypted_data["port"],
+                        "password": decrypted_data["password"],
+                        "passwordSudo": decrypted_data["passwordSudo"],
+                        "manager": decrypted_data["manager"],
+                    }
+                    encrypted_connection = encrypt_credentials(new_connection, new_key)
+                    new_connections.append(encrypted_connection)
+
+                with open(conf["keyFile"], "w") as key_file:
+                    encrypted_key = encrypt_credentials(new_key, new_key)
+                    key_file.write(encrypted_key)
+
+                with open(file_path, "w") as f:
+                    json.dump(new_connections, f)
+
+            reencrypt(encrypted_data_file)
+
+            if os.path.exists('./backup'):
+                files = [os.path.join('./backup', f) for f in os.listdir('./backup') if os.path.isfile(os.path.join('./backup', f)) and f.endswith('.backup')]
+                if (input("Do you want to re-encrypt all backups? if not they will become unusable [Y/n] ").lower() not in ['n', 'no']):
+                    for file in files:
+                        reencrypt(file)
+
 
 
         else:
