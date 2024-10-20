@@ -142,7 +142,7 @@ The JSON file has four main parts:
 ```shell
 massupd -x
 ```
-Exporting connections will decrypt all the connections and save them as a json file in the folder you are running the command. The exported file, called "export.json" is compatible with the import function which makes it usefull and the only to change the encryption key (for now).
+Exporting connections will decrypt all the connections and save them as a json file in the folder you are running the command. The exported file, called "export.json" will be compatible with the import function.
 
 ### Using -w or --wipe
 ```shell
@@ -161,6 +161,14 @@ massupd -b m
 massupd -b r
 ```
 *Restores connetions from a backup*
+
+### Using -n or --new-key
+Used to change the encryption key
+
+re-encrypts the connections and all backups
+```shell
+massupd -n
+```
 
 
 ## Configuration
