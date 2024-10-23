@@ -53,6 +53,7 @@ Running the tool without any flags starts the updating process.
   -i [IMPORT_LIST], --import-list [IMPORT_LIST]    import connections from list
   -k KEY, --key KEY                                Run script with key inn command
   -l [LOG], --log [LOG]                            Reads last 'n' lines in log file (default / blank is 25)
+  -n, --new-key                                    Sets a new dectryption key
   -r, --remove                                     Remove connection by ip
   -t, --test                                       Test all connections
   -u, --user-command                               Run a user defined command
@@ -96,6 +97,8 @@ The JSON file has four main parts:
 - creds: Shared credentials for multiple connections.
 - ips: List of IP addresses with shared credentials.
 - connections: Standalone connections with defined IP and credentials.
+
+*Note that "passwordSudo" means passwordless sudo wich is not enabled by default*
 
 *Example JSON file:*
 ```json
