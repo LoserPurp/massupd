@@ -1,8 +1,14 @@
 salt: salt1234
 testCommand: whoami
+rebootCommand: sudo reboot
+shutdownCommand: sudo poweroff
 logFile: massupd.log
 listFile: /usr/lib/massups/list.json
 conFile: connections.json
 managerFile: managers.yaml
 keyFile: key.txt
 exportFile: export.json
+aliases: aliases.json
+# timeouts is defined in seconds (WIP)
+updateTimeout: 300
+customCommandTimeout: 600
