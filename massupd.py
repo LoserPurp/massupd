@@ -14,9 +14,15 @@ import os
 import yaml
 
 current_directory = os.getcwd()
+save_output = False
+save_output_path = current_directory
 
 script_directory = os.path.dirname(os.path.abspath(__file__))
 os.chdir(script_directory)
+
+power_options = ''
+
+filters = {}
 
 try:
     with open("conf.yaml", "r") as file:
@@ -24,10 +30,8 @@ try:
         conf = yaml.safe_load(file)
 except Exception as e:
     print(f'Error reading manager file, {e}')
-    exit()
+    exit(1)
 
-
-filters = {}
 encrypted_data_file = conf["conFile"]
 
 
@@ -60,7 +64,35 @@ def decrypt_credentials(encrypted_credentials, key):
         return json.loads(decrypted_credentials_str.replace("'", "\""))
     except:
         log("Error decryption failed, wrong password or connection is not formatted correctly!", True)
-        exit()
+        exit(1)
+
+
+class MultiTimer:
+    def __init__(self):
+        self.timers = {}
+
+    def start(self, name):
+        if name in self.timers:
+            log(f"tried to start timer {name}, but it already exists", False)
+        else:
+            self.timers[name] = time.time()
+
+    def stop(self, name):
+        if name not in self.timers:
+            return None
+        
+        elapsed = time.time() - self.timers.pop(name)
+        return elapsed
+
+    def elapsed_time(self, name):
+        if name not in self.timers:
+            print(f"Timer '{name}' does not exist or was not started.")
+            return None
+
+        elapsed = time.time() - self.timers[name]
+        return f"{elapsed:.2f}"
+
+timer = MultiTimer()
 
 
 def get_managers():
@@ -70,7 +102,7 @@ def get_managers():
             return(managers)
     except Exception as e:
         log(f'Error reading manager file, {e}', True)
-        exit()
+        exit(1)
 
 
 def log(msg, to_console):
@@ -84,6 +116,7 @@ def log(msg, to_console):
 
 
 def update_system(user, ip, port, password, package_manager, sudo_password):
+    timer.start(ip)
     try:
         managers = get_managers()
         check = ['user', 'ip', 'port', 'password', 'passwordSudo', 'manager']
@@ -103,9 +136,17 @@ def update_system(user, ip, port, password, package_manager, sudo_password):
 
         else:
             return
+        
+        command = managers[package_manager]
+
+        if power_options in ['r', 'reboot', 'restart']:
+            command = command + f'&& {conf["rebootCommand"]}'
+        elif power_options in ['s', 'shutdown', 'poweroff']:
+            command = command + f'&& {conf["shutdownCommand"]}'
+
 
         if package_manager in managers:
-            stdin, stdout, stderr = ssh.exec_command(f'{managers[package_manager]}\n', get_pty=True)
+            stdin, stdout, stderr = ssh.exec_command(f'{command}\n', get_pty=True)
         else:
             log(f"Error updating {ip}, did not find {package_manager} in manager list", True)
             return
@@ -114,14 +155,14 @@ def update_system(user, ip, port, password, package_manager, sudo_password):
             stdin.write(password + '\n')
             stdin.flush()
 
-        log(f"Update started on {ip}, this may take a while.", True)        
+        log(f"Update started on {ip}", True)
         stdout.channel.recv_exit_status()
         exit_code = str(stdout.channel.recv_exit_status())
 
         if exit_code != '0':
             log(f'Error updating {ip}: (Exit code {exit_code})', True)
         else:
-            log(f"Update on {ip} using {package_manager} completed.", True)
+            log(f"Update on {ip} completed in {timer.stop(ip):.2f} seconds.", True)
 
     except Exception as e:
         log(f"Error updating {ip}, {e}", True)
@@ -130,6 +171,7 @@ def update_system(user, ip, port, password, package_manager, sudo_password):
 
 
 def test_connection(user, ip, port, password, sudo_password, manager):
+    timer.start(ip)
     command = conf["testCommand"]
     try:
         check = ['user', 'ip', 'port', 'password', 'passwordSudo', 'manager']
@@ -165,7 +207,7 @@ def test_connection(user, ip, port, password, sudo_password, manager):
         if exit_code != '0':
             log(f'Error testing {ip}: (Exit code {exit_code})', True)
         else:
-            log(f"Test on {ip} was successful", True)
+            log(f"Test on {ip} was successful taking {timer.stop(ip):.2f} seconds", True)
 
     except Exception as e:
         log(f'Error testing {ip}: {e}', True)
@@ -394,7 +436,43 @@ def read_log(number_of_lines):
             exit()
 
 
-def run_custom_command(user, ip, port, password, sudo_password, command, manager, filters=None):
+def update_all(key):
+    timer.start("update_all")
+    log("Starting updated on all systems", True)
+    try:
+        with open(encrypted_data_file, "r") as file:
+            encrypted_data = json.load(file)
+
+            def run():
+                decrypted_credentials = decrypt_credentials(encrypted_connection, key)
+                update_system(decrypted_credentials["user"], decrypted_credentials["ip"],
+                            decrypted_credentials["port"], decrypted_credentials["password"],
+                            decrypted_credentials["manager"], decrypted_credentials["passwordSudo"])
+
+        threads = []
+        for encrypted_connection in encrypted_data:
+            thread = threading.Thread(target=run)
+            thread.start()
+            threads.append(thread)
+
+        for thread in threads:
+            thread.join()
+
+    except FileNotFoundError:
+        print("No connections found. Use -a or -i to add new connections.")
+        log("Update failed, connections file not found", False)
+
+    print("\n")
+    log(f"Update finished taking {timer.stop("update_all"):.2f} seconds", True)
+    print("\n")
+    if power_options in ['r', 'reboot', 'restart']:
+        log("Restarting all selected systems", True)
+    elif power_options in ['s', 'shutdown', 'poweroff']:
+        log("Shutting down all selected systems", True)
+
+
+def run_custom_command(user, ip, port, password, sudo_password, command, manager):
+    timer.start(ip)
     try:
         check = ['user', 'ip', 'port', 'password', 'passwordSudo', 'manager']
         check2 = [user, ip, port, password, sudo_password, manager]
@@ -402,15 +480,33 @@ def run_custom_command(user, ip, port, password, sudo_password, command, manager
         ssh = paramiko.SSHClient()
         ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
 
+        if command.lower().startswith(':'):
+            try:
+                with open(conf["aliases"], "r") as file:
+                    aliases = json.load(file)
+            except FileNotFoundError:
+                    log('Unable to access aliases file, make a new alias to create file', True)
+            if command[1:] in aliases:
+                command = aliases[command[1:]]
+            else:
+                log(f'No alias with the name {command[1:]}', True)
+
         if not filters:
             ssh.connect(ip, username=user, password=password, port=port)
+
         elif filters["filter"] in ['w', 'wl', 'whitelist'] and filters["filtering"] in check and filters["value"] in check2:
             ssh.connect(ip, username=user, password=password, port=port)
+
         elif filters["filter"] in ['b', 'bl', 'blacklist'] and filters["filtering"] in check and filters["value"] not in check2:
             ssh.connect(ip, username=user, password=password, port=port)
+
         else:
-            log("Filter conditions not met, command not executed", True)
             return
+
+        if power_options in ['r', 'reboot', 'restart']:
+            command = command + f'&& {conf["rebootCommand"]}'
+        elif power_options in ['s', 'shutdown', 'poweroff']:
+            command = command + f'&& {conf["shutdownCommand"]}'
 
         stdin, stdout, stderr = ssh.exec_command(command, get_pty=True)
 
@@ -424,7 +520,7 @@ def run_custom_command(user, ip, port, password, sudo_password, command, manager
         if exit_code != '0':
             log(f'Error running custom command on {ip}: (Exit code {exit_code})', True)
         else:
-            log(f"Custom command [{command}] on {ip} ran successfully", True)
+            log(f"Custom command [{command}] on {ip} took {timer.stop(ip):.1f} seconds", True)
 
     except Exception as e:
         log(f'Error running custom command on {ip}: {e}', True)
@@ -526,11 +622,13 @@ def main():
         parser.add_argument("-k", "--key", action="store", help="Run script with key inn command")
         parser.add_argument("-l", "--log", nargs='?', const=25, default=None, help="Reads last 'n' lines in log file or c to clear all logs")
         parser.add_argument("-n", "--new-key", action="store_true", help="Sets a new dectryption key")
+        parser.add_argument("-p", "--power", nargs='?', const="path", default=None, help="shutdown or restart system (s/r)")
         parser.add_argument("-r", "--remove", action="store_true", help="Remove connection by ip")
         parser.add_argument("-t", "--test", action="store_true", help="Test all connections")
-        parser.add_argument("-u", "--user-command", action="store_true", help="Run a user defined command")
-        parser.add_argument("-w", "--wipe", action="store_true", help="Wipes all the connections")
+        parser.add_argument("-u", "--user-command", action="store_true", help="Run a user defined command (to use an alias start command with "'":"'")")
+        parser.add_argument("-w", "--wipe", action="store_true", help="Wipes all the connections and backups")
         parser.add_argument("-x", "--export", action="store_true", help="Saves all connections as a unencrypted json file")
+        parser.add_argument("--alias", nargs='?', const="help", default=None, help="List, set and remove command aliases")
 
         args = parser.parse_args()
 
@@ -541,37 +639,45 @@ def main():
                 print(line, end='')
             exit()
 
+        elif args.power:
+            global power_options
+            power_options = args.power
+            if power_options not in ['r', 'reboot', 'restart', 's', 'shutdown', 'poweroff']:
+                print(f'"{power_options}" is not a vaild power option (see --help)')
+                exit(1)
 
-        if args.key:
-            key = args.key
-            key = derive_key(key)
-            check = check_key(key)
+        if not args.alias:
+            if args.key:
 
-            if key != check:
-                print("Error, key does not match!")
-                exit()
-        else:
-            tries = 0
-            while tries < 3:
-                key = getpass.getpass("Enter decryption key: ")
-                print("")
-
+                key = args.key
                 key = derive_key(key)
                 check = check_key(key)
 
                 if key != check:
                     print("Error, key does not match!")
-                    tries += 1
-                    if tries >= 3:
-                        log("Tried password to many times!", True)
-                        exit()
-                else:
-                    break
+                    exit(1)
+            else:
+                tries = 0
+                while tries < 3:
+                    key = getpass.getpass("Enter decryption key: ")
+                    print("")
+
+                    key = derive_key(key)
+                    check = check_key(key)
+
+                    if key != check:
+                        print("Error, key does not match!")
+                        tries += 1
+                        if tries >= 3:
+                            log("Tried password to many times!", True)
+                            exit(1)
+                    else:
+                        break
 
         if args.filter:
-            if args.connections or args.edit or args.log:
-                print("Filter can not be run along this argument, use filter with (update, test or when running a custom command)")
-                exit()
+            if args.edit or args.log:
+                print("Filter can not be run along this argument, use filter with (update, test, list connectins or when running a custom command)")
+                exit(1)
             while True:
                 if args.filter not in ['w', 'b', 'white', 'black', 'whitelist', 'blacklist', 'wl', 'bl']:
                     print('Filter must be white or blacklist (w/b)')
@@ -680,8 +786,8 @@ def main():
                 try:
                     select = int(input("Select a backup to restore: "))
                 except ValueError:
-                    print("You must select a number!")
-                    exit()
+                    print("You must select a number")
+                    exit(1)
                 if 1 <= select <= len(files):
                     selected_file = os.path.join('./backup', files[select - 1])
                     try:
@@ -813,6 +919,7 @@ def main():
 
 
         elif args.test:
+            timer.start("test_con")
             try:
                 with open(encrypted_data_file, "r") as file:
                     encrypted_data = json.load(file)
@@ -836,6 +943,8 @@ def main():
                 for thread in threads:
                     thread.join()
 
+                print("")
+                log(f"Test finished taking {timer.stop("test_con"):.2f} seconds", True)
             except FileNotFoundError:
                 print("No connections found. Use -a or -i to add new connections.")
             except KeyboardInterrupt:
@@ -851,7 +960,8 @@ def main():
                         return
 
                 custom_command = input("What command would you like to run?: ")
-                log("Running custom command on all systems", True)
+                timer.start("custom_command")
+                log("Running custom command on all systems", False)
                 def run():
                         decrypted_credentials = decrypt_credentials(encrypted_connection, key)
                         run_custom_command(decrypted_credentials["user"], decrypted_credentials["ip"],
@@ -871,6 +981,13 @@ def main():
                 print("No connections found. Use -a or -i to add new connections.")
             except KeyboardInterrupt:
                 exit()
+            print("")
+            log(f"Running command tok {timer.stop("custom_command"):.2f} seconds", True)
+            print("")
+            if power_options in ['r', 'reboot', 'restart']:
+                log("Restarting all selected systems", True)
+            elif power_options in ['s', 'shutdown', 'poweroff']:
+                log("Shutting down all selected systems", True)
 
 
         elif args.wipe:
@@ -883,6 +1000,18 @@ def main():
                 except Exception as e:
                     log(f"Error: Unable to remove {file}. {e}", True)
 
+            if os.path.exists('./backup') and os.path.isdir('./backup'):
+                for filename in os.listdir('./backup'):
+                    file_path = os.path.join('./backup', filename)
+
+                    if os.path.isfile(file_path):
+                        try:
+                            os.remove(file_path)
+                        except Exception as e:
+                            log(f'Error deleting backup file {e}', True)
+            else:
+                log('No backups to delete', False)
+
 
         elif args.export:
             data = []
@@ -892,7 +1021,7 @@ def main():
                     encrypted_data = json.load(file)
             except:
                 log("Error: Could not open connection file", True)
-                exit()
+                exit(1)
 
             for con in encrypted_data:
                 data.append(decrypt_credentials(con, key))
@@ -947,34 +1076,62 @@ def main():
                         reencrypt(file)
 
 
+        elif args.alias:
+            if args.alias in ['l','ls','list']:
+                log("Listing all aliases", False)
+                try:
+                    with open(conf["aliases"], "r") as file:
+                        aliases = json.load(file)
+                except FileNotFoundError:
+                        log('Unable to access aliases file, make a new alias to create file', True)
+                        exit(1)
+
+                print("{:<10} {:<20}".format("Alias", "Command"))
+                print("-" * 30)
+                for key in aliases:
+                    row = [key, aliases[key]]
+                    print("{:<10} {:<20}".format(*row))
+
+
+            elif args.alias.lower() in ['set', 's', 'mk']:
+                try:
+                    with open(conf["aliases"], "r") as file:
+                        aliases = json.load(file)
+                except FileNotFoundError:
+                    aliases = {}
+
+                alias_name = input('Enter name for a new or existing alias: ')
+
+                alias_command = input('Enter the command for your alias: ')
+                aliases[alias_name] = alias_command
+                with open(conf["aliases"], "w") as file:
+                    json.dump(aliases, file, indent=4)
+                log(f'Added alias {alias_name} with command {alias_command}', False)
+
+
+            elif args.alias.lower() in ['remove', 'r', 'rm']:
+                try:
+                    with open(conf["aliases"], "r") as file:
+                        aliases = json.load(file)
+                except FileNotFoundError:
+                    log("No aliases found to remove.", True)
+                    aliases = {}
+                    exit(1)
+
+                alias_name = input('Enter the name of the alias to remove: ')
+
+                if alias_name in aliases:
+                    del aliases[alias_name]
+                    with open(conf["aliases"], "w") as file:
+                        json.dump(aliases, file, indent=4)
+                    log(f"Removed alias {alias_name}.", False)
+                else:
+                    log(f"Alias '{alias_name}' not found.", True)
+            else:
+                log(f"{args.alias} is not a accepted argument. try ("'"ls"'", "'"mk"'" or "'"rm"'")", True)
 
         else:
-            log("Starting updated on all systems", True)
-            try:
-                with open(encrypted_data_file, "r") as file:
-                    encrypted_data = json.load(file)
-
-                    def run():
-                        decrypted_credentials = decrypt_credentials(encrypted_connection, key)
-                        update_system(decrypted_credentials["user"], decrypted_credentials["ip"],
-                                    decrypted_credentials["port"], decrypted_credentials["password"],
-                                    decrypted_credentials["manager"], decrypted_credentials["passwordSudo"])
-
-                threads = []
-                for encrypted_connection in encrypted_data:
-                    thread = threading.Thread(target=run)
-                    thread.start()
-                    threads.append(thread)
-
-                for thread in threads:
-                    thread.join()
-
-            except FileNotFoundError:
-                print("No connections found. Use -a or -i to add new connections.")
-                log("Update failed, connections file not found", False)
-
-            print("\n"
-                  "Update finished")
+            update_all(key)
 
 
     except KeyboardInterrupt:
